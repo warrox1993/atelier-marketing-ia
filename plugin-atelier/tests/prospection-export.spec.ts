@@ -18,7 +18,9 @@ import { creerServices } from "../src/serveur/services.js";
 import { neutraliserCellule } from "../src/serveur/services-base-clients.js";
 import { BRIEF, ISSUE, REV1, SOC, creerBanc } from "./outils-base.js";
 import { emballer, paireEd25519, passerelle } from "./outils-passerelle.js";
-import { avecClesDonnees, REFS_CLES } from "./outils-cles-donnees.js";
+import { avecClesDonnees, CLES_TEST, REFS_CLES } from "./outils-cles-donnees.js";
+import { chiffrer } from "../src/serveur/chiffrement-donnees.js";
+import { empreinteAppel } from "../src/serveur/signatures.js";
 
 const P = await passerelle();
 const CLES = paireEd25519();
@@ -390,6 +392,17 @@ describe("tache.prospects.exporter", () => {
   const demande = (f: ReturnType<typeof banc>, cle: string) => ({ prospectIds: [f.id("0123.456.749")], canal: "courriel", service: "crm", entite: "non-vie", cleIdempotence: cle });
   const exporter = (f: ReturnType<typeof banc>, corps: unknown) => f.appeler("tache.prospects.exporter", { params: { issueId: ISSUE }, body: corps, agent: true });
 
+  it("canal courrier : refusé avant toute proposition (aucun champ de coordonnée connu dans les CRM), rien de stocké", async () => {
+    const f = banc();
+    f.tacheSousPorte();
+    await f.deposer();
+    const r = await exporter(f, { ...demande(f, "export-courrier"), canal: "courrier" });
+    expect(r.status).toBe(400);
+    expect(JSON.stringify(r.body)).toMatch(/courrier/u);
+    expect(f.t.appels).toEqual([]);
+    expect(f.t.diffusions).toEqual([]);
+  });
+
   it("sans base légale enregistrée : 403, export refusé et motivé, aucune diffusion", async () => {
     const f = banc();
     f.tacheSousPorte();
@@ -442,6 +455,134 @@ describe("tache.prospects.exporter", () => {
     expect(f.t.diffusions).toHaveLength(1);
     expect(f.t.diffusions[0]).toMatchObject({ etat: "simulee", action: "modifier_crm", outil: "crm_creer_contact" });
     expect(ok.body.diffusion.preuveApprobation ?? null).toBeNull();
+  });
+
+  /** Export valide mené jusqu'à l'approbation puis la diffusion simulée ; renvoie la demande, l'appel proposé et la coordonnée en clair du prospect. */
+  async function exportCompletEnDemo(f: ReturnType<typeof banc>, cle: string) {
+    f.tacheSousPorte();
+    await f.deposer();
+    f.baseLegale(f.id("0123.456.749"));
+    const propose = await exporter(f, demande(f, cle));
+    f.issues.get(ISSUE)!.status = "done";
+    f.passe();
+    f.decision({ portee: { revisionId: REV1, action: "modifier_crm", canal: "crm", compte: null, audience: null, montantMaxCents: null, dureeJours: null } });
+    const envoye = await exporter(f, demande(f, cle));
+    return { propose, envoye, courriel: ENTREPRISES[0]!.contacts[0]!.Value as string };
+  }
+  const dossierAppels = async (f: ReturnType<typeof banc>) =>
+    (await f.appeler("tache.dossier", { params: { issueId: ISSUE }, query: { partie: "appelsProposes" }, agent: true })).body.appelsProposes as Ligne[];
+  /** Tout ce que le banc a retenu, sauf les fiches de prospects (leur dénomination d'entreprise est publique et en clair). */
+  const toutStocke = (f: ReturnType<typeof banc>) => JSON.stringify({
+    t: f.t, exports: f.tp.exports, commentaires: f.commentaires, activite: f.activite, issues: [...f.issues.values()], interactions: f.interactions,
+    documents: f.documents, mises: f.mises, journauxLogger: f.journauxLogger,
+  });
+
+  it("la vraie coordonnée et la dénomination partent dans l'appel signé : le dossier les rend en clair, l'empreinte relue correspond", async () => {
+    const f = banc();
+    f.tacheSousPorte();
+    await f.deposer();
+    f.baseLegale(f.id("0123.456.749"));
+    const propose = await exporter(f, demande(f, "export-clair"));
+    const courriel = ENTREPRISES[0]!.contacts[0]!.Value as string;
+    expect(propose.status).toBe(202);
+    const [a] = await dossierAppels(f);
+    expect(a!.arguments.contacts).toHaveLength(1);
+    expect(a!.arguments.contacts[0]).toMatchObject({ reference: f.id("0123.456.749"), denomination: "Toitures de Meuse", coordonnee: courriel, canal: "courriel", entite: "non-vie" });
+    expect(empreinteAppel({ service: a!.service, outil: a!.outil, compte: a!.compte, arguments: a!.arguments })).toBe(a!.empreinte);
+    expect(propose.body.appel.empreinte).toBe(a!.empreinte);
+  });
+
+  it("l'aperçu montré à l'humain (réponse de l'export et dossier) liste les contacts avec leur coordonnée : il approuve exactement ce qui part", async () => {
+    const f = banc();
+    const { propose, courriel } = await exportCompletEnDemo(f, "export-apercu");
+    const cibleContacts = (apercu: { cibles: Array<{ champ: string; valeur: string }> }) => apercu.cibles.find((c) => c.champ === "contacts")!.valeur;
+    expect(cibleContacts(propose.body.appel.apercu)).toContain(courriel);
+    expect(cibleContacts(propose.body.appel.apercu)).toContain("Toitures de Meuse");
+    const [a] = await dossierAppels(f);
+    expect(cibleContacts(a!.apercu)).toContain(courriel);
+  });
+
+  it("au repos : ni la coordonnée ni le nom d'un particulier en clair nulle part (appels, diffusions, exports, journal, commentaires, tâches), la coordonnée seulement chiffrée", async () => {
+    const f = banc();
+    f.tacheSousPorte();
+    await f.deposer();
+    const id = f.id("0123.456.749");
+    f.baseLegale(id);
+    const fiche = f.tp.prospects.find((p) => p.id === id)!;
+    fiche.denomination = null;
+    fiche.nomChiffre = chiffrer("Camille Particuliere", CLES_TEST.chiffrement);
+    const courriel = ENTREPRISES[0]!.contacts[0]!.Value as string;
+    expect((await exporter(f, demande(f, "export-repos"))).status).toBe(202);
+    f.issues.get(ISSUE)!.status = "done";
+    f.passe();
+    f.decision({ portee: { revisionId: REV1, action: "modifier_crm", canal: "crm", compte: null, audience: null, montantMaxCents: null, dureeJours: null } });
+    expect((await exporter(f, demande(f, "export-repos"))).status).toBe(201);
+    expect(f.t.appels).toHaveLength(1);
+    expect(f.t.diffusions).toHaveLength(1);
+    const stocke = toutStocke(f);
+    expect(stocke).not.toContain(courriel);
+    expect(stocke).not.toContain("Camille Particuliere");
+    // La ligne stockée garde la coordonnée sous sa forme chiffrée, que seul le coffre ouvre.
+    expect((f.t.appels[0]!.arguments as Ligne).contacts[0].coordonnee).toMatch(/^chv1\./u);
+    // Le dossier rend pourtant le clair exact signé : coordonnée du canal et nom déchiffré du particulier.
+    const [a] = await dossierAppels(f);
+    expect(a!.arguments.contacts[0]).toMatchObject({ denomination: "Camille Particuliere", coordonnee: courriel });
+    expect(empreinteAppel({ service: a!.service, outil: a!.outil, compte: a!.compte, arguments: a!.arguments })).toBe(a!.empreinte);
+  });
+
+  it("valeur indéchiffrable : l'export est refusé avec un motif clair, rien n'est proposé ni signé, la valeur n'est citée nulle part", async () => {
+    const f = banc();
+    f.tacheSousPorte();
+    await f.deposer();
+    const id = f.id("0123.456.749");
+    f.baseLegale(id);
+    const fiche = f.tp.prospects.find((p) => p.id === id)!;
+    fiche.coordonnees = fiche.coordonnees.map((c: Ligne) => ({ ...c, valeur: chiffrer("autre@exemple.invalid", Buffer.alloc(32, 7)) }));
+    const r = await exporter(f, demande(f, "export-indechiffrable"));
+    expect(r.status).toBe(403);
+    expect(r.body.etat).toBe("refusee");
+    expect(ExportCrm.parse(r.body.export).motifRefus).toMatch(/indéchiffrable/u);
+    expect(f.t.appels).toEqual([]);
+    expect(f.t.diffusions).toEqual([]);
+    expect(toutStocke(f)).not.toContain("indéchiffrable]");
+    expect(JSON.stringify(r.body)).not.toContain("autre@exemple.invalid");
+  });
+
+  it("un agent ne peut pas poser `scelle` pour faire déchiffrer un jeton recopié : argument inconnu, refusé, rien de stocké", async () => {
+    const f = banc();
+    f.tacheSousPorte();
+    const jeton = chiffrer("autre@exemple.invalid", CLES_TEST.chiffrement);
+    const r = await f.appeler("tache.appels.proposer", {
+      params: { issueId: ISSUE }, agent: true,
+      body: { revisionId: REV1, service: "crm", outil: "crm_creer_contact", compte: "crm/compte-1", arguments: { contacts: [{ reference: "x", coordonnee: jeton }], scelle: true } },
+    });
+    expect(r.status).toBe(400);
+    expect(f.t.appels).toEqual([]);
+    expect(JSON.stringify(r.body)).not.toContain("autre@exemple.invalid");
+  });
+
+  it.each([["crm_creer_contact", "crm"], ["pipedrive_creer_personne", "pipedrive"], ["teamleader_creer_contact", "teamleader"], ["odoo_creer_lead", "odoo"]])("un agent ne peut pas proposer %s : ces appels naissent de l'export seulement, rien de stocké", async (outil, service) => {
+    const f = banc();
+    f.tacheSousPorte();
+    const r = await f.appeler("tache.appels.proposer", {
+      params: { issueId: ISSUE }, agent: true,
+      body: { revisionId: REV1, service, outil, compte: `${service}/compte-1`, arguments: { contacts: [{ reference: "x", denomination: "Camille Inventee", coordonnee: "[REDACTED-EMAIL-4da14e02]" }] } },
+    });
+    expect(r.status).toBe(400);
+    expect(JSON.stringify(r.body)).toMatch(/export/u);
+    expect(f.t.appels).toEqual([]);
+  });
+
+  it("clé illisible à la lecture : le dossier reste consultable, la valeur reste chiffrée", async () => {
+    const source = banc();
+    await exportCompletEnDemo(source, "export-cle-perdue");
+    const appel = source.t.appels[0]!;
+    const f = banc();
+    f.tacheSousPorte();
+    f.t.appels.push(appel);
+    f.ctx.secrets.resolve = async () => { throw new Error("secret introuvable"); };
+    const [a] = await dossierAppels(f);
+    expect(String(a!.arguments.contacts[0].coordonnee)).toMatch(/^chv1\./u);
   });
 });
 

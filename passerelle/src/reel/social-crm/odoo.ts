@@ -13,11 +13,13 @@
 //   odoo_leads_search_read  search_read sur crm.lead, domaine de période ajouté (create_date), champs du
 //                           simulateur L7 limités à ceux que l'instance possède (fields_get)
 //   odoo_ecrire_lead        write(ids, vals) ; réconciliation par read
+//   odoo_creer_lead         search_read (domaine d'égalité) puis create(vals_list)
 
 import type { FournisseurService, OutilPasserelle } from "../../fournisseurs.js";
 import { definitionsOdoo } from "../../commun/social-crm/odoo.js";
 import type { AccesPlateforme } from "./autorisation.js";
-import { DateReelle, gabarit, lendemain, liste, objet, texte, verifierAu, verifierPeriode } from "./commun.js";
+import { DateReelle, gabarit, lendemain, liste, nombre, objet, texte, verifierAu, verifierPeriode } from "./commun.js";
+import { creationContacts, critereRecherche, estCourriel, nomDuContact, sansNull, tableau } from "./creation.js";
 import { lire, mutationReelle, type Reconciliation } from "./execution.js";
 import { envoyer, ErreurFournisseur, verifierReponse } from "./http.js";
 import type { DependancesOutils } from "./meta.js";
@@ -119,5 +121,24 @@ export function fournisseurOdooReel(dep: DependancesOutils): FournisseurService 
     },
   });
 
-  return { service: "odoo", mode: "reel", outils: [leads, ecrire] };
+  const creer = creationContacts(dep, {
+    outil: gabarit(DEFS.odoo_creer_lead, "Crée des leads Odoo (méthode create du modèle crm.lead) ; un lead déjà présent (même courriel ou téléphone, sinon même société et code postal) n'est pas recréé. Réponse : { crees: [{ reference, id }], existants: [{ reference, id }] }."),
+    requeteReelle: "POST /json/2/crm.lead/search_read puis POST /json/2/crm.lead/create { vals_list } (repli : execute_kw(..., 'crm.lead', 'create', [[vals]]))",
+  }, {
+    chercher: async (acces, c) => {
+      const k = critereRecherche(c);
+      const domaine = k.type === "nom" ? [["partner_name", "=", k.valeur], ...(k.codePostal !== null ? [["zip", "=", k.codePostal]] : [])] : [[k.type === "email" ? "email_from" : "phone", "=", k.valeur]];
+      const trouves = tableau(await appelOdoo(dep, acces, "crm.lead", "search_read", { domain: domaine, fields: ["id"], limit: 1 }, [domaine], { fields: ["id"], limit: 1 }, "les leads")).map(objet);
+      return trouves[0] ? String(nombre(trouves[0]["id"])) : null;
+    },
+    creer: async (acces, c) => {
+      const valeurs = { ...sansNull({ name: nomDuContact(c), partner_name: c.denomination, zip: c.code_postal, city: c.commune }), ...(c.coordonnee === null ? {} : { [estCourriel(c) ? "email_from" : "phone"]: c.coordonnee }) };
+      const ids = liste(await appelOdoo(dep, acces, "crm.lead", "create", { vals_list: [valeurs] }, [[valeurs]], {}, "les leads"));
+      // Sans identifiant rendu, le lead a peut-être été créé : résultat incertain (réconciliation au nouvel essai).
+      if (typeof ids[0] !== "number") throw new ErreurFournisseur("requete_invalide", "Odoo n'a pas rendu l'identifiant du lead créé.", null, false);
+      return String(ids[0]);
+    },
+  });
+
+  return { service: "odoo", mode: "reel", outils: [leads, ecrire, creer] };
 }

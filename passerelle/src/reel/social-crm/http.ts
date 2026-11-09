@@ -52,6 +52,8 @@ export class ErreurFournisseur extends Error {
     readonly attenteMs: number | null = null,
     /** Vrai quand la requête n'a certainement produit aucun effet chez la plateforme. */
     readonly sansEffet: boolean = true,
+    /** Statut HTTP de la réponse refusée, quand il y en a une (outils de création : seul détail gardé avec le code). */
+    readonly statut: number | null = null,
   ) {
     super(`[${code}] ${message}`);
   }
@@ -234,10 +236,10 @@ export function verifierReponse(reponse: ReponseHttp, plateforme: Plateforme, ci
 
   if (reponse.statut === 429) {
     const politique = plateforme === "hubspot" && corps["policyName"] ? ` (${String(corps["policyName"])})` : "";
-    throw new ErreurFournisseur("limite_debit", `Limite de débit atteinte chez ${nom}${politique} : ${texteAttente(attente)}.`, attente);
+    throw new ErreurFournisseur("limite_debit", `Limite de débit atteinte chez ${nom}${politique} : ${texteAttente(attente)}.`, attente, true, reponse.statut);
   }
   if (reponse.statut === 401 || /AccessDenied|Invalid apikey|SessionExpired/i.test(nomOdoo + messageBrut)) {
-    throw new ErreurFournisseur("jeton_expire", `Autorisation ${nom} refusée (jeton ou clé expiré, révoqué ou invalide) : reconnectez le service dans Paperclip (Apps).`);
+    throw new ErreurFournisseur("jeton_expire", `Autorisation ${nom} refusée (jeton ou clé expiré, révoqué ou invalide) : reconnectez le service dans Paperclip (Apps).`, null, true, reponse.statut);
   }
   if (reponse.statut === 403 || /AccessError/.test(nomOdoo)) {
     const conseil =
@@ -246,13 +248,13 @@ export function verifierReponse(reponse: ReponseHttp, plateforme: Plateforme, ci
         : plateforme === "hubspot"
           ? " La connexion n'a pas la portée nécessaire (refaire la connexion avec la méthode « publication »)."
           : " Vérifier les droits de l'utilisateur connecté dans la plateforme.";
-    throw new ErreurFournisseur("permission_manquante", `Permission refusée par ${nom} sur ${cible}${messageBrut ? ` (${messageBrut})` : ""}.${conseil}`);
+    throw new ErreurFournisseur("permission_manquante", `Permission refusée par ${nom} sur ${cible}${messageBrut ? ` (${messageBrut})` : ""}.${conseil}`, null, true, reponse.statut);
   }
   if (reponse.statut === 404 || /MissingError/.test(nomOdoo)) {
-    throw new ErreurFournisseur("introuvable", `Introuvable chez ${nom} : ${cible}.`);
+    throw new ErreurFournisseur("introuvable", `Introuvable chez ${nom} : ${cible}.`, null, true, reponse.statut);
   }
   if (reponse.statut >= 500 || reponse.statut === 408) {
-    throw new ErreurFournisseur("indisponible", `${nom} est momentanément indisponible (HTTP ${reponse.statut}).`, attente, false);
+    throw new ErreurFournisseur("indisponible", `${nom} est momentanément indisponible (HTTP ${reponse.statut}).`, attente, false, reponse.statut);
   }
-  throw new ErreurFournisseur("requete_invalide", `${nom} a refusé la requête sur ${cible} (HTTP ${reponse.statut}${messageBrut ? ` : ${messageBrut}` : ""}).`);
+  throw new ErreurFournisseur("requete_invalide", `${nom} a refusé la requête sur ${cible} (HTTP ${reponse.statut}${messageBrut ? ` : ${messageBrut}` : ""}).`, null, true, reponse.statut);
 }

@@ -11,6 +11,7 @@ import { exporterLot, type CrmMoteur } from "../src/moteur/export-crm.js";
 import { creerServices } from "../src/serveur/services.js";
 import { cleIdempotenceSignee, signerRevocations } from "../src/serveur/signatures.js";
 import { CAMP, ISSUE, REV1, SOC, creerBanc } from "./outils-base.js";
+import { avecClesDonnees, REFS_CLES } from "./outils-cles-donnees.js";
 import { avecListeFraiche, emballer, paireEd25519, passerelle } from "./outils-passerelle.js";
 import { P1, P2, P4, SOC as SOC_WF01, h, jusquAutorisation, prospect } from "./moteur-wf01-doubles.js";
 
@@ -35,8 +36,9 @@ const BASE_LEGALE = {
 function monterReel(o: { secret?: string | null } = {}) {
   const banc = creerBanc({
     mode: "reel", modeEntreprise: "reel", secret: o.secret === undefined ? PLUGIN.priveePem : o.secret,
-    config: { approbationClePrivee: { type: "secret_ref", secretId: "11111111-2222-4333-8444-555555555555" }, passerelleClesPubliques: [GW.publiqueBase64] },
+    config: { approbationClePrivee: { type: "secret_ref", secretId: "11111111-2222-4333-8444-555555555555" }, passerelleClesPubliques: [GW.publiqueBase64], ...REFS_CLES },
   });
+  avecClesDonnees(banc.ctx);
   banc.tacheSousPorte({ status: "done", etape: null, corps: "# Prospects\n\nLot du jour." });
   banc.passe();
   banc.t.sources.push({ id: "src-crm", companyId: SOC, campagneId: CAMP, issueId: ISSUE, provenance: "connexion", mode: "reel", url: null, connexion: { service: "crm", outil: "crm_lire", compte: COMPTE, chiffres: [] } });
@@ -99,8 +101,13 @@ function monterReel(o: { secret?: string | null } = {}) {
     const a = dossier.appelsProposes.find((x) => x.id === appelId)!;
     return route("tache.diffusions", AGENT, { revisionId: a.revisionId, action: "modifier_crm", canal: "crm", compte: a.compte, cleIdempotence: cle, service: a.service, outil: a.outil, arguments: a.arguments });
   };
-  const deposer = (diffusionId: string, etat: "executee" | "ambigue_a_reconcilier") => {
-    const a = appelDe();
+  /** Arguments EXACTS signés de l'appel (rendus en clair par le dossier : la ligne stockée les garde chiffrés). */
+  const argumentsClairs = async () => {
+    const dossier = (await route("tache.dossier", AGENT, null, { issueId: ISSUE }, { partie: "appelsProposes" })).corps as { appelsProposes: Array<{ id: string; arguments: Record<string, unknown> }> };
+    return dossier.appelsProposes.find((x) => x.id === appelDe().id)!.arguments;
+  };
+  const deposer = async (diffusionId: string, etat: "executee" | "ambigue_a_reconcilier") => {
+    const a = { ...appelDe(), arguments: await argumentsClairs() };
     const reponse = emballer(
       SIGNATAIRE, "reel",
       { etat, executee: etat === "executee", message: `Action ${etat}`, cle_idempotence: cleIdempotenceSignee(diffusionId), action: { service: a.service, outil: a.outil, parametres: a.arguments } },
@@ -108,7 +115,7 @@ function monterReel(o: { secret?: string | null } = {}) {
     );
     return route("tache.diffusions.issue", AGENT, { reponse }, { issueId: ISSUE, diffusionId });
   };
-  return { banc, services, exports, recus, crm, crmPourExecuteur, appelDe, approuver, rejouer, deposer, route };
+  return { banc, services, exports, recus, crm, crmPourExecuteur, appelDe, argumentsClairs, approuver, rejouer, deposer, route };
 }
 
 type Monte = ReturnType<typeof monterReel>;
@@ -179,7 +186,7 @@ describe("export CRM réel de WF-01 : l'agent crm-conversion exécute la preuve 
     const rejeu = reponseRejeu.corps as { etat: string; preuveApprobation: string };
     expect(rejeu.etat).toBe("preparee");
     expect(rejeu.preuveApprobation).toBeTruthy();
-    expect(VERIFICATEUR.verifier(rejeu.preuveApprobation, { service: "crm", outil: m.appelDe().outil, args: m.appelDe().arguments as Record<string, unknown>, compte: m.appelDe().compte, maintenantS: Math.floor(Date.now() / 1000) }).ok).toBe(true);
+    expect(VERIFICATEUR.verifier(rejeu.preuveApprobation, { service: "crm", outil: m.appelDe().outil, args: await m.argumentsClairs(), compte: m.appelDe().compte, maintenantS: Math.floor(Date.now() / 1000) }).ok).toBe(true);
     expect(((await m.deposer(diffusionId, "executee")).corps as { etat: string }).etat).toBe("confirmee");
     await t.passes(1);
     expect(t.etat()).toBe("cloturee");

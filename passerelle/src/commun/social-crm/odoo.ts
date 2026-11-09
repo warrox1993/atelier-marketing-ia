@@ -2,7 +2,7 @@
 // (src/demo/social-crm/odoo.ts) et le fournisseur réel (src/reel/social-crm/odoo.ts). `date` est le schéma de date du mode.
 
 import * as z from "zod";
-import { defLecture, defMutation, formeAuAvec, formePeriodeAvec } from "./outils.js";
+import { defLecture, defMutation, formeAuAvec, formeContactsACreer, formePeriodeAvec } from "./outils.js";
 
 const OPERATEURS = ["=", "!=", ">", ">=", "<", "<=", "in", "not in", "ilike", "like"] as const;
 export const SchemaClause = z.tuple([z.string().max(64), z.enum(OPERATEURS), z.union([z.string().max(200), z.number(), z.boolean(), z.array(z.union([z.string().max(200), z.number(), z.boolean()])).max(50)])]);
@@ -25,5 +25,6 @@ export function definitionsOdoo(date: z.ZodString) {
         ids: z.array(z.number().int().positive()).min(1).max(50).describe("Identifiants des leads (champ `id` de odoo_leads_search_read)."),
         values: z.record(z.string().regex(/^[a-z][a-z0-9_]{0,63}$/), z.union([z.string().max(500), z.number(), z.boolean()])).describe("Valeurs à écrire, par nom de champ."),
       }, false),
+    odoo_creer_lead: defMutation("odoo_creer_lead", formeContactsACreer, false),
   };
 }

@@ -17,11 +17,13 @@
 //   associations des affaires        POST /crm/v4/associations/deals/contacts/batch/read
 //   crm_modifier_contact             PATCH /crm/v3/objects/contacts/{id} { properties }
 //       https://developers.hubspot.com/docs/api-reference/crm-contacts-v3/guide
+//   crm_creer_contact                POST /crm/v3/objects/contacts/search (filtre EQ) puis POST /crm/v3/objects/contacts { properties }
 
 import type { FournisseurService, OutilPasserelle } from "../../fournisseurs.js";
 import { definitionsHubspot } from "../../commun/social-crm/hubspot.js";
 import type { AccesPlateforme } from "./autorisation.js";
 import { DateReelle, gabarit, lendemain, liste, msDate, objet, texte, verifierAu, verifierPeriode } from "./commun.js";
+import { creationContacts, critereRecherche, estCourriel, sansNull, tableau } from "./creation.js";
 import { lire, mutationReelle, type Reconciliation } from "./execution.js";
 import { envoyer, ErreurFournisseur, verifierReponse } from "./http.js";
 import type { DependancesOutils } from "./meta.js";
@@ -138,5 +140,26 @@ export function fournisseurHubspotReel(dep: DependancesOutils): FournisseurServi
     },
   });
 
-  return { service: "crm", mode: "reel", outils: [contacts, transactions, modifier] };
+  // shortcut: l'index de recherche HubSpot peut avoir du retard juste après une création (un nouvel essai très rapproché pourrait recréer un contact) et le téléphone se compare tel quel, à relever si des doublons apparaissent.
+  const creer = creationContacts(dep, {
+    outil: gabarit(DEFS.crm_creer_contact, "Crée des contacts HubSpot (POST /crm/v3/objects/contacts) ; un contact déjà présent (même courriel ou téléphone, sinon même nom et code postal) n'est pas recréé. Réponse : { crees: [{ reference, id }], existants: [{ reference, id }] }."),
+    requeteReelle: "POST /crm/v3/objects/contacts/search puis POST /crm/v3/objects/contacts",
+  }, {
+    chercher: async (acces, c) => {
+      const k = critereRecherche(c);
+      const filtres = k.type === "nom"
+        ? [{ propertyName: "lastname", operator: "EQ", value: k.valeur }, ...(k.codePostal !== null ? [{ propertyName: "zip", operator: "EQ", value: k.codePostal }] : [])]
+        : [{ propertyName: k.type, operator: "EQ", value: k.valeur }];
+      const r = await appelHubspot(dep, acces, "POST", "/crm/v3/objects/contacts/search", "les contacts", { filterGroups: [{ filters: filtres }], properties: ["hs_object_id"], limit: 1 });
+      const premier = tableau(r["results"]).map(objet)[0];
+      return premier ? texte(premier["id"]) : null;
+    },
+    creer: async (acces, c) => {
+      const propriete = c.coordonnee === null ? {} : { [estCourriel(c) ? "email" : "phone"]: c.coordonnee };
+      const r = await appelHubspot(dep, acces, "POST", "/crm/v3/objects/contacts", "les contacts", { properties: { ...sansNull({ lastname: c.denomination, city: c.commune, zip: c.code_postal }), ...propriete } });
+      return texte(r["id"]);
+    },
+  });
+
+  return { service: "crm", mode: "reel", outils: [contacts, transactions, modifier, creer] };
 }

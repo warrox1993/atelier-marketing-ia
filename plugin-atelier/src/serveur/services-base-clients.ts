@@ -436,6 +436,8 @@ export function routesBaseClients(d: DependancesProspection, o: OutilsProspectio
       const entree = analyser(DemanderExportCrmEntree, r.corps, "Export vers le CRM");
       // Un agent ne doit pas pouvoir occuper d'avance la clé d'un export du moteur.
       if (entree.cleIdempotence.startsWith("moteur:") && r.acteur.type !== "systeme") erreur("acces_refuse", "Ce préfixe de clé est réservé au moteur de missions.");
+      // Les CRM n'ont aucun champ de coordonnée pour un courrier : l'outil de création refuserait le lot, mieux vaut ne rien proposer.
+      if (entree.canal === "courrier") erreur("entree_invalide", "Le canal « courrier » ne s'exporte pas vers un CRM (courriel, sms ou telephone attendus).");
       const issue = await d.tache(r.companyId, r.params.issueId ?? "");
       const deja = await base.lireExportCrmParCle(r.companyId, entree.cleIdempotence);
       if (deja) {
@@ -456,8 +458,19 @@ export function routesBaseClients(d: DependancesProspection, o: OutilsProspectio
         }
       }
       const { contexte } = await o.contexteExclusions(r.companyId, campagne, effectif.mode, prospects, date);
+      // La vraie coordonnée et le nom d'un particulier partent dans l'appel signé : une valeur indéchiffrable refuse l'export (jamais signée ni citée).
+      const cles = await o.clesDonnees(r.companyId);
+      const ouvrir = (v: string | null | undefined) => (v ? dechiffrer(v, cles.chiffrement) : null);
+      const lus = new Map<string, { coordonnee: string | null; denomination: string | null }>();
       for (const p of prospects) {
-        const motif = verifier(p, entree.canal, contexte);
+        let motif = verifier(p, entree.canal, contexte);
+        if (motif === null) {
+          try {
+            lus.set(p.id, { coordonnee: ouvrir(p.coordonnees.find((c) => c.canal === entree.canal)?.valeur), denomination: p.denomination ?? ouvrir(p.nomChiffre) });
+          } catch {
+            motif = "Coordonnée ou nom indéchiffrable (clé du coffre différente ou valeur altérée)";
+          }
+        }
         verifications.push({ prospectId: p.id, ok: motif === null, motif });
       }
       const referentiel = await o.referentielPour(r.companyId, campagne?.id ?? null);
@@ -491,19 +504,19 @@ export function routesBaseClients(d: DependancesProspection, o: OutilsProspectio
         compte = comptes[0]!;
       }
       const outil = OUTIL_EXPORT[entree.service]!;
-      const args = {
-        contacts: prospects.map((p) => ({
-          reference: p.id, denomination: p.denomination, numero_bce: p.numeroBce, code_postal: p.zone.codePostal ?? null, commune: p.zone.commune ?? null, canal: entree.canal,
-          coordonnee: p.coordonnees.find((c) => c.canal === entree.canal)?.empreinte ?? null, entite: entree.entite,
-        })),
-      };
+      const contact = (p: Prospect, coordonnee: string | null, denomination: string | null) => ({
+        reference: p.id, denomination, numero_bce: p.numeroBce, code_postal: p.zone.codePostal ?? null, commune: p.zone.commune ?? null, canal: entree.canal, coordonnee, entite: entree.entite,
+      });
+      // Signé et approuvé : les valeurs en clair. Stocké (`appels_proposes`) : les mêmes contacts avec les valeurs sous leur forme chiffrée, `scelle` marque cette forme (aucun outil n'a cet argument).
+      const args = { contacts: prospects.map((p) => contact(p, lus.get(p.id)!.coordonnee, lus.get(p.id)!.denomination)) };
+      const argsStockes = { contacts: prospects.map((p) => contact(p, p.coordonnees.find((c) => c.canal === entree.canal)?.valeur ?? null, p.denomination ?? p.nomChiffre)), scelle: true };
       const controle = controlerAppel({ service: entree.service, outil, compte, arguments: args }, liv.corps);
       if (!controle.ok) erreur("entree_invalide", `Appel refusé : ${controle.motif}.`);
       let appel = await base.lireAppelParEmpreinte(r.companyId, issue.id, liv.revisionId, controle.empreinte);
       if (!appel) {
         await base.insererAppel({
           id: randomUUID(), companyId: r.companyId, issueId: issue.id, revisionId: liv.revisionId, service: entree.service, outil, action: controle.action, compte,
-          arguments: args, empreinte: controle.empreinte, empreinteArguments: controle.empreinteArguments, par: par(r.acteur),
+          arguments: argsStockes, empreinte: controle.empreinte, empreinteArguments: controle.empreinteArguments, par: par(r.acteur),
         });
         appel = await base.lireAppelParEmpreinte(r.companyId, issue.id, liv.revisionId, controle.empreinte);
       }

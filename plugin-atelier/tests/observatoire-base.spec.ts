@@ -27,6 +27,22 @@ function fauxDb(rowCount = 1) {
 const collecte = (etat: ResultatCollecte["etat"], extra: Partial<ResultatCollecte> = {}): ResultatCollecte => ({ url: "https://exemple.org/p", etat, ...extra });
 
 describe("baseObservatoire", () => {
+  it("liste des sources communes : une page vide au-delà de la fin renvoie le vrai total", async () => {
+    const appels: Array<{ sql: string; params: unknown[] }> = [];
+    const db = {
+      namespace: NS,
+      query: async (sql: string, params: unknown[]) => { appels.push({ sql, params }); return /count\(\*\) over/u.test(sql) ? [] : [{ total: 7 }]; },
+      execute: async () => ({ rowCount: 0 }),
+    } as unknown as PluginContext["db"];
+    const r = await baseObservatoire(db, NS).listerSourcesCommunes(SOC, { debut: 50, limite: 10 });
+    expect(r).toEqual({ total: 7, sources: [] });
+    expect(appels).toHaveLength(2);
+    for (const a of appels) {
+      expect(a.sql).toMatch(/company_id = \$1/u);
+      expect(a.params[0]).toBe(SOC);
+    }
+  });
+
   it("chaque requête est paramétrée et filtrée par company_id = $1", async () => {
     const { base, lectures, ecritures } = fauxDb();
     await base.projetParSlug(SOC, "rea");

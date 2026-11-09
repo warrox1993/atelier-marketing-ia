@@ -24,6 +24,22 @@ export const formeAuAvec = (date: z.ZodString) => ({
   au: date.optional().describe("Date à laquelle on observe l'état du CRM (par défaut : la fin de période)."),
 });
 
+/** Contact à créer dans un CRM (export de prospects) : forme que signe le plugin ; `coordonnee` est la vraie valeur (courriel ou téléphone selon `canal`). */
+export const SchemaContactACreer = z.strictObject({
+  reference: z.string().max(200),
+  denomination: z.string().max(300).nullable(),
+  numero_bce: z.string().max(200).nullable(),
+  code_postal: z.string().max(200).nullable(),
+  commune: z.string().max(200).nullable(),
+  canal: z.string().max(40),
+  coordonnee: z.string().max(200).nullable(),
+  entite: z.string().max(200).nullable(),
+});
+export type ContactACreer = z.infer<typeof SchemaContactACreer>;
+
+/** Même plafond que `exportProspectsMax` du plugin. */
+export const formeContactsACreer = { contacts: z.array(SchemaContactACreer).min(1).max(200).describe("Contacts à créer (200 au plus) ; ceux déjà présents dans le CRM ne sont pas recréés.") };
+
 /** Définition neutre d'un outil : nom, schéma d'entrée et annotations. */
 export interface DefinitionOutil<S extends z.ZodRawShape = z.ZodRawShape> {
   nom: string;

@@ -495,7 +495,8 @@ passerelle, SPKI DER en base64). En mode réel, une diffusion acceptée est « p
 `service`, `outil`, `arguments` fournis ; outil d'écriture connu, de ce service et de cette action (`publier` :
 `facebook_publier`, `instagram_publier`, `linkedin_publier` ; `envoyer` : `facebook_envoyer_message` ;
 `modifier_crm` : `crm_modifier_contact`, `pipedrive_modifier_personne`, `odoo_ecrire_lead`,
-`teamleader_modifier_contact`) ; canal approuvé lié au service par table explicite ; compte approuvé non nul et
+`teamleader_modifier_contact`, `crm_creer_contact`, `pipedrive_creer_personne`, `teamleader_creer_contact`,
+`odoo_creer_lead`) ; canal approuvé lié au service par table explicite ; compte approuvé non nul et
 identique ; arguments exactement ceux du schéma de l'outil ; chaque texte publié (et lien, image) figure TEL
 QUEL dans la révision approuvée, chaque valeur écrite au CRM aussi ; clé disponible. Charge : `v`, `cle`
 (clé d'idempotence), `service`, `outil`, `empreinte` (SHA-256 du JSON canonique des arguments sans la preuve),

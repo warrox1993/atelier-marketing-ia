@@ -36,7 +36,8 @@ export const SECRETS_EMIS = {
 export const CLE_API_PIPEDRIVE = "abcdef0123456789abcdef0123456789abcdef01";
 export const CLE_API_ODOO = "6578616d706c65206a736f6e20617069206b6579";
 
-type Reponse = { statut: number; corps?: unknown; entetes?: Record<string, string> } | "coupure" | "coupure_apres_effet";
+// « passe » : la requête est traitée normalement (sert à viser la Nième requête d'une même route).
+type Reponse = { statut: number; corps?: unknown; entetes?: Record<string, string> } | "coupure" | "coupure_apres_effet" | "passe";
 
 export interface Appel {
   methode: string;
@@ -137,7 +138,7 @@ export class FauxPlateformes {
     });
   }
 
-  /** Réponse(s) forcée(s) pour la prochaine requête dont « MÉTHODE chemin » commence par `cle`. */
+  /** Réponse(s) forcée(s) pour la prochaine requête dont « MÉTHODE chemin » commence par `cle` (égale à `cle` si elle finit par « $ »). */
   injecter(cle: string, ...reponses: Reponse[]): void {
     this.injections.set(cle, [...(this.injections.get(cle) ?? []), ...reponses]);
   }
@@ -155,9 +156,11 @@ export class FauxPlateformes {
     this.appels.push(appel);
     const cle = `${appel.methode} ${appel.chemin}`;
     for (const [prefixe, file] of this.injections) {
-      if (cle.startsWith(prefixe) && file.length > 0) {
+      const vise = prefixe.endsWith("$") ? cle === prefixe.slice(0, -1) : cle.startsWith(prefixe);
+      if (vise && file.length > 0) {
         const r = file.shift()!;
         if (file.length === 0) this.injections.delete(prefixe);
+        if (r === "passe") break;
         if (r === "coupure") {
           req.socket.destroy();
           return;
@@ -400,6 +403,22 @@ export class FauxPlateformes {
     }
     if (p.startsWith("/hubspot-api/crm/")) {
       if (this.porteur(a) !== this.jetonHubspotValide) return envoyer(401, { status: "error", message: "Authentication credentials not found.", correlationId: "c1", category: "INVALID_AUTHENTICATION" });
+      if (p === "/hubspot-api/crm/v3/objects/contacts" && a.methode === "POST") {
+        const props = (this.json(a)["properties"] ?? {}) as Record<string, string>;
+        if (!props["email"] && !props["lastname"] && !props["firstname"]) return envoyer(400, { status: "error", message: "Property values were not valid: aucun de email, firstname, lastname", correlationId: "c3", category: "VALIDATION_ERROR" });
+        const doublon = props["email"] ? [...this.contactsHubspot.entries()].find(([, v]) => v["email"] === props["email"]) : undefined;
+        if (doublon) return envoyer(409, { status: "error", message: `Contact already exists. Existing ID: ${doublon[0]}`, correlationId: "c4", category: "CONFLICT" });
+        const id = String(200 + this.contactsHubspot.size);
+        this.contactsHubspot.set(id, { ...props, createdate: new Date().toISOString(), hs_object_id: id });
+        this.effets.push({ type: "hubspot_creation", donnees: { id, ...props } });
+        return envoyer(201, { id, properties: props, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), archived: false });
+      }
+      if (p === "/hubspot-api/crm/v3/objects/contacts/search" && (this.json(a)["filterGroups"] as { filters: { operator: string }[] }[])?.[0]?.filters.every((f) => f.operator === "EQ")) {
+        // Recherche par égalité de propriétés (déjà présent avant création) ; les autres recherches filtrent la date de création.
+        const filtres = (this.json(a)["filterGroups"] as { filters: { propertyName: string; value: string }[] }[])[0]!.filters;
+        const trouves = [...this.contactsHubspot.entries()].filter(([, v]) => filtres.every((f) => v[f.propertyName] === f.value));
+        return envoyer(200, { total: trouves.length, results: trouves.map(([id, v]) => ({ id, properties: { ...v, hs_object_id: id }, createdAt: v["createdate"], updatedAt: v["lastmodifieddate"] ?? v["createdate"], archived: false })) });
+      }
       if (p === "/hubspot-api/crm/v3/objects/contacts/search") {
         const j = this.json(a);
         const filtre = ((j["filterGroups"] as { filters: { value: string; highValue: string }[] }[])[0]!.filters[0])!;
@@ -447,6 +466,25 @@ export class FauxPlateformes {
       if (!autorise) return envoyer(401, { success: false, error: "unauthorized access", errorCode: 401, error_info: "Please check developers.pipedrive.com" });
       const chemin = pd[1]!;
       if (chemin === "/api/v1/users/me") return envoyer(200, { success: true, data: { id: 1, name: "Jean Test", company_id: 7, company_name: "Acme Rénovation", company_domain: "acme" } });
+      if (chemin === "/api/v2/persons/search" && a.methode === "GET") {
+        const terme = a.requete.get("term") ?? "";
+        const champ = a.requete.get("fields");
+        const trouvees = [...this.personnesPipedrive.values()].filter((p) => {
+          const valeurs = (cle: string): unknown[] => ((p[cle] as { value: unknown }[] | undefined) ?? []).map((e) => e.value);
+          if (champ === "email") return valeurs("emails").includes(terme);
+          if (champ === "phone") return valeurs("phones").includes(terme);
+          return p["name"] === terme;
+        });
+        return envoyer(200, { success: true, data: { items: trouvees.map((p) => ({ result_score: 1, item: { id: p["id"], type: "person", name: p["name"] } })) } });
+      }
+      if (chemin === "/api/v2/persons" && a.methode === "POST") {
+        const j = this.json(a);
+        if (typeof j["name"] !== "string" || j["name"] === "") return envoyer(400, { success: false, error: "name: Le nom est obligatoire.", error_info: "", errorCode: 400 });
+        const id = 100 + this.personnesPipedrive.size;
+        this.personnesPipedrive.set(id, { id, ...j, add_time: new Date().toISOString(), update_time: new Date().toISOString() });
+        this.effets.push({ type: "pipedrive_creation", donnees: { id, ...j } });
+        return envoyer(200, { success: true, data: { id, ...j } });
+      }
       if (chemin === "/api/v2/persons" || chemin === "/api/v2/deals") {
         const depuis = Date.parse(a.requete.get("updated_since") ?? "1970-01-01T00:00:00Z");
         const elements =
@@ -490,12 +528,29 @@ export class FauxPlateformes {
       if (!/^tlAcces\d+-SECRET$/.test(this.porteur(a))) return envoyer(401, { errors: [{ code: 401, title: "Unauthorized", status: 401 }] });
       const action = p.slice("/teamleader-api/".length);
       if (action === "users.me") return envoyer(200, { data: { id: "66abace2-62af-0836-a927-fe3f44b9b47b", account: { type: "account", id: "a1b2c3d4-0000-4000-8000-000000000001" }, first_name: "Jean", last_name: "Test", email: "jean@exemple.invalid" } });
+      if (action === "contacts.add") {
+        const j = this.json(a);
+        if (typeof j["last_name"] !== "string" || j["last_name"] === "") return envoyer(400, { errors: [{ title: "Validation failed", status: 400, source: { pointer: "/last_name" } }] });
+        const id = `cb8da52a-ce89-4bf6-8f7e-8ee6cb85e${String(900 + this.contactsTeamleader.size)}`;
+        const maintenant = new Date().toISOString();
+        this.contactsTeamleader.set(id, { id, status: "active", ...j, added_at: maintenant, updated_at: maintenant });
+        this.effets.push({ type: "teamleader_creation", donnees: { id, ...j } });
+        return envoyer(201, { data: { id, type: "contact" } });
+      }
       if (action === "contacts.list") {
-        const j = this.json(a) as { page?: { size?: number; number?: number }; filter?: { updated_since?: string } };
+        const j = this.json(a) as { page?: { size?: number; number?: number }; filter?: { updated_since?: string; email?: string; term?: string } };
         const taille = j.page?.size ?? 20;
         const numero = j.page?.number ?? 1;
         const depuis = Date.parse(j.filter?.updated_since ?? "1970-01-01T00:00:00+00:00");
-        const tous = [...this.contactsTeamleader.values()].filter((c) => Date.parse(String(c["updated_at"])) >= depuis).sort((x, y) => String(x["added_at"]).localeCompare(String(y["added_at"])));
+        const { email, term } = j.filter ?? {};
+        const correspond = (c: Record<string, unknown>): boolean => {
+          const courriels = (c["emails"] as { email: string }[] | undefined)?.map((e) => e.email) ?? [];
+          const numeros = (c["telephones"] as { number: string }[] | undefined)?.map((t) => t.number) ?? [];
+          if (email !== undefined) return courriels.includes(email);
+          if (term !== undefined) return numeros.includes(term) || courriels.includes(term) || c["last_name"] === term;
+          return true;
+        };
+        const tous = [...this.contactsTeamleader.values()].filter((c) => Date.parse(String(c["updated_at"])) >= depuis && correspond(c)).sort((x, y) => String(x["added_at"]).localeCompare(String(y["added_at"])));
         return envoyer(200, { data: tous.slice((numero - 1) * taille, numero * taille) });
       }
       if (action === "deals.list") {
@@ -526,6 +581,9 @@ export interface LeadOdoo extends Record<string, unknown> {
   id: number;
 }
 
+/** Scénario forcé : « limite_N » répond 429 avec Retry-After de N secondes ; « vide » répond 200 avec `{}` ; « refus » répond 422 en répétant la requête. */
+type ScenarioOdoo = "passe" | "coupure" | "coupure_apres_effet" | "erreur" | "refus" | "vide" | `limite_${number}`;
+
 /** Faux Odoo : 19 (JSON-2) ou 17 (JSON-RPC seulement). Base « demo19 » / « demo17 ». */
 export class FauxOdoo {
   private serveur: Server | null = null;
@@ -538,7 +596,40 @@ export class FauxOdoo {
     { id: 27, name: "Perdu", type: "opportunity", contact_name: "Carla", partner_name: false, email_from: false, phone: false, city: false, zip: false, stage_id: [3, "Proposition"], expected_revenue: 3000, create_date: "2026-09-20 09:00:00", write_date: "2026-09-25 09:00:00", date_closed: false, won_status: "lost", active: false, user_id: false, team_id: false, partner_id: false, probability: 0 },
   ];
 
+  private readonly injections = new Map<string, ScenarioOdoo[]>();
+
   constructor(readonly version: 19 | 17) {}
+
+  /** Scénario(s) forcé(s) pour les prochains appels de cette méthode de modèle (« create », « search_read »...). */
+  injecter(methode: string, ...scenarios: ScenarioOdoo[]): void {
+    this.injections.set(methode, [...(this.injections.get(methode) ?? []), ...scenarios]);
+  }
+
+  /** Applique le scénario injecté ; vrai si la requête est déjà traitée (connexion coupée ou panne). `effet` joue l'effet réel. */
+  private scenario(methode: string, req: IncomingMessage, envoyer: Envoi, corps: string, effet: () => void): boolean {
+    const s = this.injections.get(methode)?.shift();
+    if (s === undefined || s === "passe") return false;
+    if (s === "refus") {
+      // Refus 4xx qui répète la requête reçue (coordonnée comprise), comme certaines plateformes.
+      envoyer(422, { name: "odoo.exceptions.ValidationError", message: `Valeur refusée. Requête reçue : ${corps}`, arguments: [] });
+      return true;
+    }
+    if (s === "vide") {
+      envoyer(200, {});
+      return true;
+    }
+    if (s.startsWith("limite_")) {
+      envoyer(429, { name: "odoo.exceptions.RateLimit", message: "Trop de requêtes", arguments: [] }, { "retry-after": s.slice("limite_".length) });
+      return true;
+    }
+    if (s === "erreur") {
+      envoyer(500, { name: "werkzeug.exceptions.InternalServerError", message: `Panne simulée. Requête reçue : ${corps}`, arguments: [] });
+      return true;
+    }
+    if (s === "coupure_apres_effet") effet();
+    req.socket.destroy();
+    return true;
+  }
 
   demarrer(): Promise<string> {
     return new Promise((resolve) => {
@@ -583,6 +674,17 @@ export class FauxOdoo {
       const limit = Number(nommes["limit"] ?? 80);
       return { ok: true, valeur: lignes.slice(offset, offset + limit).map((l) => Object.fromEntries([["id", l.id], ...champs.map((c) => [c, l[c]])])) };
     }
+    if (methode === "create") {
+      const ids: number[] = [];
+      for (const vals of (nommes["vals_list"] ?? []) as Record<string, unknown>[]) {
+        if (typeof vals["name"] !== "string" || vals["name"] === "") return { ok: false, statut: 422, nom: "odoo.exceptions.ValidationError", message: "Le champ « name » est obligatoire (crm.lead)." };
+        const id = Math.max(...this.leads.map((l) => l.id)) + 1;
+        this.leads.push({ id, active: true, create_date: new Date().toISOString().slice(0, 19).replace("T", " "), ...vals });
+        this.effets.push({ creation: vals, id });
+        ids.push(id);
+      }
+      return { ok: true, valeur: ids };
+    }
     if (methode === "write") {
       const ids = nommes["ids"] as number[];
       const vals = nommes["vals"] as Record<string, unknown>;
@@ -609,8 +711,8 @@ export class FauxOdoo {
     const corps = Buffer.concat(morceaux).toString("utf8");
     const url = new URL(req.url ?? "/", this.base);
     this.appels.push({ methode: req.method ?? "GET", chemin: url.pathname, requete: url.searchParams, entetes: req.headers, corps });
-    const envoyer = (statut: number, json: unknown): void => {
-      res.writeHead(statut, { "content-type": "application/json; charset=utf-8" });
+    const envoyer: Envoi = (statut, json, entetes = {}): void => {
+      res.writeHead(statut, { "content-type": "application/json; charset=utf-8", ...entetes });
       res.end(JSON.stringify(json));
     };
     if (url.pathname === "/web/version") {
@@ -621,7 +723,9 @@ export class FauxOdoo {
       if (req.headers.authorization !== `bearer ${CLE_API_ODOO}` && req.headers.authorization !== `Bearer ${CLE_API_ODOO}`) {
         return envoyer(401, { name: "werkzeug.exceptions.Unauthorized", message: "Invalid apikey", arguments: ["Invalid apikey", 401], context: {} });
       }
-      const r = this.executer(json2[2]!, JSON.parse(corps || "{}") as Record<string, unknown>);
+      const nommes = JSON.parse(corps || "{}") as Record<string, unknown>;
+      if (this.scenario(json2[2]!, req, envoyer, corps, () => void this.executer(json2[2]!, nommes))) return;
+      const r = this.executer(json2[2]!, nommes);
       return r.ok ? envoyer(200, r.valeur) : envoyer(r.statut, { name: r.nom, message: r.message, arguments: [r.message], context: {} });
     }
     if (url.pathname === "/jsonrpc") {
@@ -636,7 +740,8 @@ export class FauxOdoo {
         if (bd !== "demo17" || uid !== 2 || cle !== CLE_API_ODOO) return erreur("odoo.exceptions.AccessDenied", "Access Denied");
         if (modele !== "crm.lead") return erreur("builtins.KeyError", modele);
         const nommes: Record<string, unknown> =
-          methode === "search_read" ? { domain: args[0], ...kw } : methode === "write" ? { ids: args[0], vals: args[1] } : methode === "read" ? { ids: args[0], fields: args[1] } : { ...kw };
+          methode === "search_read" ? { domain: args[0], ...kw } : methode === "write" ? { ids: args[0], vals: args[1] } : methode === "read" ? { ids: args[0], fields: args[1] } : methode === "create" ? { vals_list: args[0] } : { ...kw };
+        if (this.scenario(methode, req, envoyer, corps, () => void this.executer(methode, nommes))) return;
         const r = this.executer(methode, nommes);
         return r.ok ? envoyer(200, { jsonrpc: "2.0", id: j.id, result: r.valeur }) : erreur(r.nom, r.message);
       }

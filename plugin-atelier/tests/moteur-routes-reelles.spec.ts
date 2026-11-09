@@ -14,6 +14,7 @@ import { creerOutilsMoteur, type ErreurOutil } from "../src/moteur/outils.js";
 import type { EtapeMission, Mission } from "../src/serveur/base.js";
 import { creerServices } from "../src/serveur/services.js";
 import { CAMP, ISSUE, PRODUCTEUR, REV1, REV2, SOC, creerBanc } from "./outils-base.js";
+import { avecClesDonnees, REFS_CLES } from "./outils-cles-donnees.js";
 import { P1, P2, P4, SOC as SOC_WF01, h, jusquAutorisation, prospect } from "./moteur-wf01-doubles.js";
 
 const MISSION = "mission-1";
@@ -164,7 +165,8 @@ describe("export CRM de production de WF-01 par la vraie route", () => {
   const IDENTIFIANT_INCONNU = "00000000-0000-4000-8000-0000000000ff";
 
   function monterExport(o: { oppositionsAReimporter?: number; sansBaseLegale?: string[]; oppositionSur?: number } = {}) {
-    const banc = creerBanc({ modeEntreprise: "demonstration" });
+    const banc = creerBanc({ modeEntreprise: "demonstration", config: { ...REFS_CLES } });
+    avecClesDonnees(banc.ctx);
     banc.tacheSousPorte({ status: "done", etape: null, corps: "# Prospects\n\nLot du jour." });
     // Tâche approuvée nativement (done) et contrôle automatique réussi sur la révision : seule la décision humaine modifier_crm manque dans les essais qui la refusent.
     banc.passe();

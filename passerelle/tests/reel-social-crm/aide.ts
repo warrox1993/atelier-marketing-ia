@@ -35,7 +35,7 @@ export interface Montage {
   arreter(): Promise<void>;
 }
 
-export async function monter(options: { sansClePublique?: boolean; delaiAppelMs?: number; signataire?: SignataireEnveloppe } = {}): Promise<Montage> {
+export async function monter(options: { sansClePublique?: boolean; delaiAppelMs?: number; signataire?: SignataireEnveloppe; /** Clé publique d'approbation (PEM) d'un plugin réel, à la place de celle du montage. */ clePubliqueApprobation?: string } = {}): Promise<Montage> {
   const faux = new FauxPlateformes();
   const urlFaux = await faux.demarrer();
   const odoo19 = new FauxOdoo(19);
@@ -61,7 +61,7 @@ export async function monter(options: { sansClePublique?: boolean; delaiAppelMs?
       pipedrive: IDENTIFIANTS.pipedrive,
       teamleader: IDENTIFIANTS.teamleader,
     },
-    clePubliqueApprobation: options.sansClePublique ? null : publicKey.export({ type: "spki", format: "pem" }).toString(),
+    clePubliqueApprobation: options.sansClePublique ? null : options.clePubliqueApprobation ?? publicKey.export({ type: "spki", format: "pem" }).toString(),
     attenteQuotaMaxMs: 10_000,
     delaiAppelMs: options.delaiAppelMs ?? 3000,
     urlRetourPublique: null,

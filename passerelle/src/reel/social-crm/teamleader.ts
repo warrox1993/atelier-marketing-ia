@@ -9,6 +9,8 @@
 //                  sort [{ field: created_at|weighted_value }] ; réponse data[] avec status new|open|won|lost, lead,
 //                  estimated_value { amount, currency }, current_phase, closed_at, created_at, updated_at...
 //   contacts.update { id, first_name, last_name, emails[{type: primary, email}], telephones[{type: phone|mobile|fax, number}]... } → 204
+//   contacts.add   { last_name, emails[{type: primary, email}], telephones[{type: phone, number}] } → 201 { data: { id, type } }
+//                  (NON vérifié sur la documentation : page illisible sans navigateur, d'après les souvenirs de l'équipe)
 // Limite de débit : 200 requêtes par minute glissante, HTTP 429 et x-ratelimit-reset (page « General Principles »).
 // Aucun filtre sur la date de création : la période est reconstituée par updated_since et un tri croissant.
 
@@ -16,6 +18,7 @@ import type { FournisseurService, OutilPasserelle } from "../../fournisseurs.js"
 import { definitionsTeamleader } from "../../commun/social-crm/teamleader.js";
 import type { AccesPlateforme } from "./autorisation.js";
 import { DateReelle, gabarit, liste, MAX_PAGES_PARCOURUES, objet, texte, tropDeResultats, verifierAu, verifierPeriode } from "./commun.js";
+import { creationContacts, critereRecherche, estCourriel, nomDuContact, tableau } from "./creation.js";
 import { lire, mutationReelle, type Reconciliation } from "./execution.js";
 import { envoyer, ErreurFournisseur, verifierReponse } from "./http.js";
 import type { DependancesOutils } from "./meta.js";
@@ -140,5 +143,27 @@ export function fournisseurTeamleaderReel(dep: DependancesOutils): FournisseurSe
     },
   });
 
-  return { service: "teamleader", mode: "reel", outils: [contacts, deals, modifier] };
+  const creer = creationContacts(dep, {
+    outil: gabarit(DEFS.teamleader_creer_contact, "Crée des contacts Teamleader (POST /contacts.add) ; un contact déjà présent (même courriel ou téléphone, sinon même nom) n'est pas recréé. Réponse : { crees: [{ reference, id }], existants: [{ reference, id }] }."),
+    requeteReelle: "POST /contacts.list puis POST /contacts.add",
+  }, {
+    // Le filtre `term` est approximatif : on ne retient que ce qui correspond exactement au critère.
+    chercher: async (acces, c) => {
+      const k = critereRecherche(c);
+      const r = await appelTeamleader(dep, acces, "contacts.list", { filter: k.type === "email" ? { email: k.valeur } : { term: k.valeur }, page: { size: 10, number: 1 } }, "les contacts");
+      const trouve = tableau(r["data"]).map(objet).find((t) => {
+        if (k.type === "email") return liste(t["emails"]).map(objet).some((e) => texte(e["email"]).toLowerCase() === k.valeur.toLowerCase());
+        if (k.type === "phone") return liste(t["telephones"]).map(objet).some((n) => texte(n["number"]) === k.valeur);
+        return texte(t["last_name"]) === k.valeur;
+      });
+      return trouve ? texte(trouve["id"]) : null;
+    },
+    creer: async (acces, c) => {
+      const coordonnee = c.coordonnee === null ? {} : estCourriel(c) ? { emails: [{ type: "primary", email: c.coordonnee }] } : { telephones: [{ type: "phone", number: c.coordonnee }] };
+      const r = await appelTeamleader(dep, acces, "contacts.add", { last_name: nomDuContact(c), ...coordonnee }, "les contacts");
+      return texte(objet(r["data"])["id"]);
+    },
+  });
+
+  return { service: "teamleader", mode: "reel", outils: [contacts, deals, modifier, creer] };
 }

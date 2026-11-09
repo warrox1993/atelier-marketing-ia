@@ -30,7 +30,7 @@ export interface DependancesExecution {
   maintenant?: () => number;
 }
 
-const attendreParDefaut = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+export const attendreParDefaut = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /** Lecture : accès à la plateforme, un renouvellement si le jeton est refusé, une attente courte si le débit est dépassé. */
 export async function lire<T>(dep: DependancesExecution, contexte: ContexteAppel, appel: (acces: AccesPlateforme) => Promise<T>): Promise<T> {
@@ -70,6 +70,8 @@ export interface DefinitionMutation<A extends Record<string, unknown>> {
    * l'humain approuve est donc exactement ce qui part (mention d'information IA des messages directs, si elle est réactivée).
    */
   preparer?: (args: A) => A;
+  /** Paramètres rapportés dans la réponse à la place des arguments (par défaut tous les arguments) : pour ne pas recopier de données personnelles. */
+  parametres?: (args: A) => Record<string, unknown>;
   /** Effectue l'action ; renvoie les identifiants produits. Lève ErreurFournisseur. */
   executer: (acces: AccesPlateforme, args: A) => Promise<Record<string, unknown>>;
   /** Relit la plateforme pour savoir si une tentative ambiguë a produit son effet (depuis `debutMs`). */
@@ -101,7 +103,7 @@ export function mutationReelle<A extends Record<string, unknown>>(dep: Dependanc
       const reste = (def.preparer ? def.preparer(resteBrut as unknown as A) : resteBrut) as Record<string, unknown>;
       const args = reste as unknown as A;
       def.verifier?.(args);
-      const action = { service: contexte.service, outil: def.outil.nom, requete_reelle_visee: def.requeteReelle, parametres: { ...reste } };
+      const action = { service: contexte.service, outil: def.outil.nom, requete_reelle_visee: def.requeteReelle, parametres: def.parametres ? def.parametres(args) : { ...reste } };
       const preparee = (motif: string): ReponseMutation => ({
         etat: "preparee",
         executee: false,

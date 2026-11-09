@@ -8,7 +8,9 @@ import { creerEtapesWf01, type CrmMoteur } from "../src/moteur/export-crm.js";
 import { chargerGabarit } from "../src/moteur/gabarits.js";
 import type { EtapeMission, Mission } from "../src/serveur/base.js";
 import type { ZoneChoisie } from "../src/serveur/regles-prospection.js";
+import { chiffrer } from "../src/serveur/chiffrement-donnees.js";
 import { creerCrmDouble } from "./outils-crm-double.js";
+import { CLES_TEST } from "./outils-cles-donnees.js";
 
 export const SOC = "11111111-1111-4111-8111-111111111111";
 export const T = "2026-11-08T10:00:00+01:00";
@@ -25,7 +27,7 @@ export function prospect(n: number): Prospect {
     referentiel: { version: 1, entite: null, offres: [], segments: [], etablissement: null, cibleProspection: null },
     forme: "personne_morale", denomination: `Société fictive ${n}`, nomChiffre: null, nace: [],
     zone: { codePostal: "4000", commune: "Liège", province: "Liège", region: "Wallonie", pays: "BE" },
-    coordonnees: [{ canal: "courriel", valeur: "chv1.0123456789abcdef.AAAAAAAAAAAAAAAA.Q2hpZmZyZQ.AAAAAAAAAAAAAAAAAAAAAA", empreinte: h(n), nature: "impersonnelle" }],
+    coordonnees: [{ canal: "courriel", valeur: chiffrer(`contact${n}@exemple.invalid`, CLES_TEST.chiffrement), empreinte: h(n), nature: "impersonnelle" }],
     empreintes: [{ type: "courriel", valeur: h(n) }],
     sources: [{ type: "import", sourceId: null, service: null, outil: null, url: null, collecteLe: T }],
     mode: "reel", statut: "nouveau", motifsExclusion: [], score: null, basesLegales: [], particulier: null, creeLe: T, modifieLe: T,

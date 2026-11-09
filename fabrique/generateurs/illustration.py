@@ -203,7 +203,7 @@ def ouvrir_moteur(reglages: dict, texte: str):
     transformeur = AutoModel.from_pretrained(
         poids + "/transformer", torch_dtype=torch.bfloat16, device_map="cuda", use_safetensors=True,
         quantization_config=BitsAndBytesConfig(load_in_8bit=True, llm_int8_skip_modules=reglages["modules_non_quantifies"]))
-    # shortcut: en 8 bits, transformer.dtype renvoie int8 et le bloc de débruitage y convertit les latents ; on calcule en bf16.
+    # En 8 bits, transformer.dtype renvoie int8 et le bloc de débruitage y convertit les latents ; on calcule en bf16.
     type(transformeur).dtype = property(lambda self: torch.bfloat16)
     pipeline = blocs.init_pipeline()
     pipeline.update_components(transformer=transformeur,

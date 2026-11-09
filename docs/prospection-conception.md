@@ -282,9 +282,12 @@ CRM » qui crée une demande de diffusion `exporter_crm`. Passage Impeccable obl
 
 - **Aucun contact sortant par l'usine** : pas d'outil d'envoi de courriel ou de SMS. L'export vers le CRM est une
   diffusion réelle ordinaire : approbation humaine de l'appel exact, preuve signée `apv1`, idempotence et
-  réconciliation existantes (§14). Nouveaux outils d'écriture de la passerelle (`crm_creer_contact`,
-  `pipedrive_creer_personne`, `teamleader_creer_contact`, `odoo_ecrire_lead` existe déjà) ajoutés à la table
-  action ↔ outil du plugin.
+  réconciliation existantes (§14). Outils d'écriture de la passerelle : `crm_creer_contact`,
+  `pipedrive_creer_personne`, `teamleader_creer_contact`, `odoo_creer_lead`. Décision du 09/11/2026 (#69) : la vraie
+  coordonnée du canal approuvé et le nom d'un particulier entrent dans les arguments signés, pour que l'humain
+  approuve exactement ce qui part ; en base, `appels_proposes.arguments` les garde chiffrés (`scelle: true`, posé
+  seulement par l'export) et l'empreinte est calculée sur le clair. Chaque contact est cherché avant d'être créé : un
+  nouvel essai après un arrêt au milieu du lot ne crée pas de doublon.
 - `verifierDiffusion` refuse l'export d'un prospect sans `BaseLegaleContact` pour le canal prévu, inscrit à une
   opposition, client actuel ou exclu.
 - La porte refuse un message de prise de contact qui contient un conseil ou une comparaison de garanties (liste de

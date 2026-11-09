@@ -2,7 +2,7 @@
 // (src/demo/social-crm/hubspot.ts) et le fournisseur réel (src/reel/social-crm/hubspot.ts). `date` est le schéma de date du mode.
 
 import * as z from "zod";
-import { defLecture, defMutation, formeAuAvec, formePeriodeAvec } from "./outils.js";
+import { defLecture, defMutation, formeAuAvec, formeContactsACreer, formePeriodeAvec } from "./outils.js";
 
 const LIMITE_DEFAUT = 10;
 const LIMITE_MAX = 100;
@@ -22,5 +22,6 @@ export function definitionsHubspot(date: z.ZodString) {
         contact_id: z.string().regex(/^\d{1,20}$/, "identifiant numérique attendu").describe("Identifiant du contact (champ `id` de crm_contacts)."),
         properties: z.record(z.string().regex(/^[a-z][a-z0-9_]{0,63}$/), z.string().max(500)).describe("Propriétés à modifier, valeurs en texte (comme PATCH /crm/v3/objects/contacts/{id})."),
       }, false),
+    crm_creer_contact: defMutation("crm_creer_contact", formeContactsACreer, false),
   };
 }

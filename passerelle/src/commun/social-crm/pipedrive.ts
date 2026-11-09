@@ -2,7 +2,7 @@
 // (src/demo/social-crm/pipedrive.ts) et le fournisseur réel (src/reel/social-crm/pipedrive.ts). `date` est le schéma de date du mode.
 
 import * as z from "zod";
-import { defLecture, defMutation, formeAuAvec, formePeriodeAvec } from "./outils.js";
+import { defLecture, defMutation, formeAuAvec, formeContactsACreer, formePeriodeAvec } from "./outils.js";
 
 const formePagination = {
   start: z.number().int().min(0).max(1_000_000).default(0).describe("Index du premier élément (0 par défaut)."),
@@ -19,5 +19,6 @@ export function definitionsPipedrive(date: z.ZodString) {
         id: z.number().int().positive().describe("Identifiant de la personne (champ `id` de pipedrive_personnes)."),
         champs: z.record(z.string().regex(/^[a-z][a-z0-9_]{0,63}$/), z.union([z.string().max(500), z.number(), z.boolean()])).describe("Champs à modifier (PUT /v1/persons/{id})."),
       }, false),
+    pipedrive_creer_personne: defMutation("pipedrive_creer_personne", formeContactsACreer, false),
   };
 }

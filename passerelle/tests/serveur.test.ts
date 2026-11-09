@@ -461,7 +461,7 @@ describe("S2 : tout outil qui rend du texte de tiers est annoncé à monde ouver
       ...outilsExtraction(),
       ...Object.values(outilsGoogleReels({ config: {} as ConfigGoogleReel, jetonGoogle: pasOuvert })).flat(),
     ];
-    expect(outils.length).toBe(38);
+    expect(outils.length).toBe(42); // 38 + les 4 outils de création de contacts (#69)
     for (const o of outils) expect(o.annotations?.openWorldHint, o.nom).toBe(true);
   });
 });

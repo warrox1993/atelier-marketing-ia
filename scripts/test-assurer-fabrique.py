@@ -20,12 +20,28 @@ spec.loader.exec_module(bo)
 spec_vo = importlib.util.spec_from_file_location("verifier_organisation", RACINE / "scripts" / "verifier-organisation.py")
 vo = importlib.util.module_from_spec(spec_vo)
 spec_vo.loader.exec_module(vo)
-OUTILS_REELS = ["fabriquer_document", "fabriquer_video", "fabriquer_image", "etat_fabrication", "voir_rendu"]
+REGISTRE = json.loads((RACINE / "organisation" / "registre" / "agents.json").read_text(encoding="utf-8"))
 
-DOCUMENTS = {"contenus", "stratege", "prospection", "crm-conversion", "mesure"}
-VIDEO = {"reseaux-sociaux"}
-IMAGE = {"contenus", "reseaux-sociaux"}
-VOIR = {"relecteur"}
+
+def _autorises(agent):
+    return set(agent["outils"]["recherche"]) | set(agent["outils"]["mutation"])
+
+
+def _agents_avec(outil_client):
+    return {a["slug"] for a in REGISTRE["agents"] if outil_client in _autorises(a)}
+
+
+def _outils_plugin_de(agent):
+    return {o[len(bo.PREFIXE_CLIENT_FABRIQUE):] for o in _autorises(agent) if o.startswith(bo.PREFIXE_CLIENT_FABRIQUE)}
+
+
+# Attendus lus dans le registre (et non écrits à la main) : outils du plugin autorisés, puis agents retenus par genre.
+OUTILS_REELS = sorted(set().union(*(_outils_plugin_de(a) for a in REGISTRE["agents"])))
+DOCUMENTS = _agents_avec(bo.OUTILS_CLIENT_FABRIQUE["document"])
+VIDEO = _agents_avec(bo.OUTILS_CLIENT_FABRIQUE["video"])
+IMAGE = _agents_avec(bo.OUTILS_CLIENT_FABRIQUE["image"])
+VOIR = _agents_avec(bo.OUTILS_CLIENT_FABRIQUE["voir"])
+assert OUTILS_REELS and DOCUMENTS and VIDEO and IMAGE and VOIR, "registre sans outil du plugin : attendus vides"
 CID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"  # UUID : les dossiers de rendus sont propres à l'entreprise
 
 
@@ -71,10 +87,11 @@ class TestAssurerFabrique(unittest.TestCase):
         api = FauxApi({"fabriqueRolesDocuments": ["designer"], "fabriqueRolesVideo": ["designer"], "autre": 1})
         bo.assurer_fabrique(api, CID, self.reg, self.agents)
         self.assertEqual(set(api.config["fabriqueAgentsDocuments"]), {f"id-{s}" for s in DOCUMENTS})
-        self.assertEqual(api.config["fabriqueAgentsVideo"], [f"id-{s}" for s in VIDEO])
+        self.assertEqual(api.config["fabriqueAgentsVideo"], sorted(f"id-{s}" for s in VIDEO))
         self.assertNotIn("id-veille", api.config["fabriqueAgentsDocuments"])
         self.assertNotIn("id-seo-local-geo", api.config["fabriqueAgentsDocuments"])
-        self.assertNotIn("id-contenus", api.config["fabriqueAgentsVideo"])
+        for slug in self.agents.keys() - VIDEO:
+            self.assertNotIn(f"id-{slug}", api.config["fabriqueAgentsVideo"])
         self.assertEqual(sorted(api.config["fabriqueAgentsImage"]), sorted(f"id-{s}" for s in IMAGE))
         self.assertNotIn("id-stratege", api.config["fabriqueAgentsImage"])
         self.assertNotIn("fabriqueRolesDocuments", api.config)
@@ -87,19 +104,17 @@ class TestAssurerFabrique(unittest.TestCase):
         api = FauxApi({})
         bo.assurer_fabrique(api, CID, self.reg, self.agents)
         self.assertEqual(api.config["fabriqueDossiersRendus"],
-                         {"id-relecteur": str(bo.dossiers_agent(CID, "relecteur")[1] / "rendus")})
+                         {f"id-{s}": str(bo.dossiers_agent(CID, s)[1] / "rendus") for s in VOIR})
         noms = [p["name"] for p in api.politiques]
+        self.assertIn("relecteur", VOIR)
         self.assertNotIn("atelier-fabrique-interdit:relecteur:voir_rendu", noms)
         self.assertIn("atelier-fabrique-interdit:relecteur:fabriquer_image", noms)
         self.assertIn("atelier-fabrique-interdit:relecteur:fabriquer_video", noms)
-        for slug in VIDEO | IMAGE | DOCUMENTS:
+        for slug in (VIDEO | IMAGE | DOCUMENTS) - VOIR:
             self.assertIn(f"atelier-fabrique-interdit:{slug}:voir_rendu", noms)
-        relecteur = next(a for a in self.reg["agents"] if a["slug"] == "relecteur")
-        reglages = bo.reglages_agent(self.reg, pathlib.Path("/c/cfg"), relecteur, pathlib.Path("/c/esp"))
-        self.assertIn("Read(//c/cfg/rendus/**)", reglages["permissions"]["allow"])
-        contenus = next(a for a in self.reg["agents"] if a["slug"] == "contenus")
-        reglages = bo.reglages_agent(self.reg, pathlib.Path("/c/cfg"), contenus, pathlib.Path("/c/esp"))
-        self.assertNotIn("Read(//c/cfg/rendus/**)", reglages["permissions"]["allow"])
+        for agent in self.reg["agents"]:
+            reglages = bo.reglages_agent(self.reg, pathlib.Path("/c/cfg"), agent, pathlib.Path("/c/esp"))
+            self.assertEqual("Read(//c/cfg/rendus/**)" in reglages["permissions"]["allow"], agent["slug"] in VOIR, agent["slug"])
 
     def test_idempotent(self):
         api = FauxApi({})
@@ -122,10 +137,10 @@ class TestAssurerFabrique(unittest.TestCase):
         bo.assurer_fabrique(api, CID, reg2, self.agents)
         self.assertIn("id-veille", api.config["fabriqueAgentsDocuments"])
         restantes = [p["name"] for p in api.politiques if ":veille:" in p["name"]]
-        # Documents et état de fabrication ouverts ; la vidéo, l'image et voir_rendu restent interdits.
-        self.assertEqual(sorted(restantes), ["atelier-fabrique-interdit:veille:fabriquer_image",
-                                             "atelier-fabrique-interdit:veille:fabriquer_video",
-                                             "atelier-fabrique-interdit:veille:voir_rendu"])
+        # Documents et état de fabrication ouverts ; tout autre outil du plugin (registre) reste interdit à « veille ».
+        ouverts = {"fabriquer_document", "etat_fabrication"} | _outils_plugin_de(veille)
+        self.assertEqual(sorted(restantes), sorted(f"atelier-fabrique-interdit:veille:{o}" for o in OUTILS_REELS if o not in ouverts))
+        self.assertIn("atelier-fabrique-interdit:veille:voir_rendu", restantes)
         self.assertEqual([p["name"] for p in api.politiques if ":veille:" not in p["name"]], autre)
         # Rejeu : plus rien à faire.
         self.assertEqual(bo.assurer_fabrique(api, CID, reg2, self.agents), 0)

@@ -455,6 +455,10 @@ seule est refusée :
 | `pipedrive_modifier_personne` | `PUT /v1/persons/{id}` | non |
 | `odoo_ecrire_lead` | `execute_kw(... 'crm.lead', 'write' ...)` | non |
 | `teamleader_modifier_contact` | `POST /contacts.update` | non |
+| `crm_creer_contact` | `POST /crm/v3/objects/contacts/search`, puis `POST /crm/v3/objects/contacts` si absent | non |
+| `pipedrive_creer_personne` | `GET /api/v2/persons/search`, puis `POST /api/v2/persons` si absente | non |
+| `teamleader_creer_contact` | `contacts.list`, puis `contacts.add` si absent (forme de `contacts.add` non vérifiée sur la documentation) | non |
+| `odoo_creer_lead` | `crm.lead` `search_read`, puis `create` si absent | non |
 
 Les paramètres de période (`debut`, `fin`, et `au` pour l'état du CRM à une date) sont propres à l'atelier : les vraies API
 filtrent autrement (`since`/`until`, filtres de recherche). Ils sont obligatoires : aucune horloge cachée, mêmes paramètres,

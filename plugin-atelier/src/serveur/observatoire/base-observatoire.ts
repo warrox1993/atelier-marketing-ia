@@ -151,13 +151,16 @@ export function baseObservatoire(db: PluginContext["db"], ns: string) {
 
   /** Liste paginée de la base commune (toutes les sources, candidates et en sommeil comprises), filtres optionnels. */
   async function listerSourcesCommunes(companyId: string, f: FiltresSourcesCommunes): Promise<{ total: number; sources: SourceCommune[] }> {
+    const FILTRE_COMMUNES = "company_id = $1 and commune and ($2::text is null or langue = $2) and ($3::text is null or pays = $3) and ($4::text is null or type = $4) and ($5::text is null or sujets @> jsonb_build_array($5::text))";
+    const filtres = [companyId, f.langue ?? null, f.pays ?? null, f.type ?? null, f.sujet ?? null];
     const lignes = await q(
-      `select id, url_canonique, type, fiabilite, langue, pays, sujets, etat, count(*) over () as total from ${t("obs_sources")} where company_id = $1 and commune and ($2::text is null or langue = $2) and ($3::text is null or pays = $3) and ($4::text is null or type = $4) and ($5::text is null or sujets @> jsonb_build_array($5::text)) order by url_canonique limit $6 offset $7`,
-      [companyId, f.langue ?? null, f.pays ?? null, f.type ?? null, f.sujet ?? null, f.limite, f.debut],
+      `select id, url_canonique, type, fiabilite, langue, pays, sujets, etat, count(*) over () as total from ${t("obs_sources")} where ${FILTRE_COMMUNES} order by url_canonique limit $6 offset $7`,
+      [...filtres, f.limite, f.debut],
     );
-    // shortcut: une page vide au-delà de la fin renvoie total 0 (fenêtre sans ligne) ; suffit à la pagination par `suivant`.
+    // Page vide au-delà de la fin : la fenêtre n'a aucune ligne, le total se relit par un count.
+    const total = lignes[0] ? Number(lignes[0].total) : f.debut > 0 ? Number((await q(`select count(*) as total from ${t("obs_sources")} where ${FILTRE_COMMUNES}`, filtres))[0]?.total ?? 0) : 0;
     return {
-      total: Number(lignes[0]?.total ?? 0),
+      total,
       sources: lignes.map((r) => ({ id: String(r.id), url: String(r.url_canonique), type: String(r.type), joignabilite: texte(r.fiabilite), langue: texte(r.langue), pays: texte(r.pays), sujets: Array.isArray(r.sujets) ? r.sujets.map(String) : [], etat: String(r.etat) as EtatSource })),
     };
   }
@@ -320,6 +323,15 @@ export function baseObservatoire(db: PluginContext["db"], ns: string) {
     return lignes[0] ? String(lignes[0].id) : null;
   }
 
+  /** Empreinte du dernier instantané, sans charger son texte (jusqu'à 2 Mio par source). */
+  async function derniereEmpreinte(companyId: string, sourceId: string): Promise<string | null> {
+    const lignes = await q(
+      `select empreinte_sha256 from ${t("obs_instantanes")} where company_id = $1 and source_id = $2 order by recupere_le desc, id limit 1`,
+      [companyId, sourceId],
+    );
+    return lignes[0] ? String(lignes[0].empreinte_sha256) : null;
+  }
+
   async function urlDeSource(companyId: string, sourceId: string): Promise<string | null> {
     const lignes = await q(`select url_canonique from ${t("obs_sources")} where company_id = $1 and id = $2`, [companyId, sourceId]);
     return lignes[0] ? String(lignes[0].url_canonique) : null;
@@ -388,5 +400,5 @@ export function baseObservatoire(db: PluginContext["db"], ns: string) {
     return (await q(`select 1 from ${t("obs_confirmations_publication")} where company_id = $1 and objet = $2`, [companyId, objet])).length > 0;
   }
 
-  return { projetParSlug, creerProjet, ajouterAlias, projetDeAlias, importerSourcesCommunes, proposerSourceCommune, suspecterSources, propositionsDuRun, activerSource, sourcesCommunes, listerSourcesCommunes, enregistrerSource, listerAlias, sourcesDuProjet, sourcesCommunesParUrl, enregistrerCollecte, enregistrerVersions, insererAffirmation, remplacerAffirmation, listerAffirmations, affirmationsParIds, versionsConnues, insererPreuve, listerPreuves, preuvesDe, instantane, instantanesParIds, dernierInstantaneId, urlDeSource, insererRevision, lireRevision, insererPublication, publicationGitExiste, confirmerPublication, publicationConfirmee, projetParId, listerVersions, revisionsSansPublication };
+  return { projetParSlug, creerProjet, ajouterAlias, projetDeAlias, importerSourcesCommunes, proposerSourceCommune, suspecterSources, propositionsDuRun, activerSource, sourcesCommunes, listerSourcesCommunes, enregistrerSource, listerAlias, sourcesDuProjet, sourcesCommunesParUrl, enregistrerCollecte, enregistrerVersions, insererAffirmation, remplacerAffirmation, listerAffirmations, affirmationsParIds, versionsConnues, insererPreuve, listerPreuves, preuvesDe, instantane, instantanesParIds, dernierInstantaneId, derniereEmpreinte, urlDeSource, insererRevision, lireRevision, insererPublication, publicationGitExiste, confirmerPublication, publicationConfirmee, projetParId, listerVersions, revisionsSansPublication };
 }

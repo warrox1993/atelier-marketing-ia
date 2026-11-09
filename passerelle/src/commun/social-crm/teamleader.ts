@@ -2,7 +2,7 @@
 // (src/demo/social-crm/teamleader.ts) et le fournisseur réel (src/reel/social-crm/teamleader.ts). `date` est le schéma de date du mode.
 
 import * as z from "zod";
-import { defLecture, defMutation, formeAuAvec, formePeriodeAvec } from "./outils.js";
+import { defLecture, defMutation, formeAuAvec, formeContactsACreer, formePeriodeAvec } from "./outils.js";
 
 const formePage = {
   page: z.object({
@@ -21,5 +21,6 @@ export function definitionsTeamleader(date: z.ZodString) {
         id: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/, "UUID attendu").describe("Identifiant du contact (champ `id` de teamleader_contacts)."),
         modifications: z.record(z.string().regex(/^[a-z][a-z0-9_]{0,63}$/), z.union([z.string().max(500), z.number(), z.boolean()])).describe("Champs à modifier (POST /contacts.update)."),
       }, false),
+    teamleader_creer_contact: defMutation("teamleader_creer_contact", formeContactsACreer, false),
   };
 }

@@ -37,7 +37,7 @@ export type RevisionApprouvee = { cle: string; numero: number; corps: string; re
 
 export interface DependancesObservatoire {
   stock: Pick<StockLiaisons, "serviceDeEntreprise">;
-  base: Pick<BaseObs, "sourcesCommunesParUrl" | "projetParSlug" | "projetParId" | "creerProjet" | "ajouterAlias" | "projetDeAlias" | "importerSourcesCommunes" | "proposerSourceCommune" | "suspecterSources" | "propositionsDuRun" | "activerSource" | "listerSourcesCommunes" | "enregistrerSource" | "sourcesDuProjet" | "enregistrerCollecte" | "enregistrerVersions" | "listerVersions" | "insererAffirmation" | "remplacerAffirmation" | "listerAffirmations" | "affirmationsParIds" | "insererPreuve" | "listerPreuves" | "instantane" | "dernierInstantaneId" | "urlDeSource" | "lireRevision" | "insererRevision" | "revisionsSansPublication" | "sourcesCommunes" | "insererPublication" | "publicationGitExiste" | "confirmerPublication" | "publicationConfirmee">;
+  base: Pick<BaseObs, "sourcesCommunesParUrl" | "projetParSlug" | "projetParId" | "creerProjet" | "ajouterAlias" | "projetDeAlias" | "importerSourcesCommunes" | "proposerSourceCommune" | "suspecterSources" | "propositionsDuRun" | "activerSource" | "listerSourcesCommunes" | "enregistrerSource" | "sourcesDuProjet" | "enregistrerCollecte" | "enregistrerVersions" | "listerVersions" | "insererAffirmation" | "remplacerAffirmation" | "listerAffirmations" | "affirmationsParIds" | "insererPreuve" | "listerPreuves" | "instantane" | "dernierInstantaneId" | "derniereEmpreinte" | "urlDeSource" | "lireRevision" | "insererRevision" | "revisionsSansPublication" | "sourcesCommunes" | "insererPublication" | "publicationGitExiste" | "confirmerPublication" | "publicationConfirmee">;
   /** Lecture protégée d'une URL (transport réel du plugin ; transport de fixtures en test). */
   lire: LireUrl;
   /** N2 : refuse un agent non assigné à la tâche en cours ou d'un rôle qui ne documente pas la route (`exigerLecteurWeb`). */
@@ -322,8 +322,9 @@ export function routesObservatoire(d: DependancesObservatoire): Partial<Record<C
     const { projectId } = await d.porte.tache(c, e.issueId);
     if (!projectId) erreur("entree_invalide", "La tâche n'a pas de projet natif : la campagne de l'article s'y rattache, créez d'abord le projet de l'article.");
     const projet = (await d.porte.projet(c, projectId)) ?? erreur("hors_entreprise", "Projet natif introuvable dans cette entreprise.");
-    // shortcut: course entre deux premiers appels simultanés réglée par l'index unique (un des deux échoue en conflit) ; à relancer.
-    const campagneId = (await d.porte.campagneDuProjet(c, projectId))?.id ?? await d.porte.creerCampagne(c, projectId, `Observatoire : ${projet.name}`);
+    // Course entre deux premiers appels : l'index unique fait échouer le second, qui reprend alors la campagne créée par l'autre.
+    const campagneId = (await d.porte.campagneDuProjet(c, projectId))?.id ?? await d.porte.creerCampagne(c, projectId, `Observatoire : ${projet.name}`)
+      .catch(async (e: unknown) => { const autre = await d.porte.campagneDuProjet(c, projectId); if (!autre) throw e; return autre.id; });
     await d.porte.creerExigenceSiAbsente({ companyId: c, campagneId, ...EXIGENCE_ARTICLE });
     // SKMK-O6 : 3 cycles, puis retour à l'humain (politique-versions.md §1) ; seule une relance humaine les relève.
     return d.porte.creerPorte({ ...r, cle: "portes.creer", corps: { companyId: c, campagneId, exigencesCiblees: [EXIGENCE_ARTICLE.code], ...e, maxCycles: LIMITES.maxCyclesCorrectionParDefaut } });
@@ -350,8 +351,9 @@ export function routesObservatoire(d: DependancesObservatoire): Partial<Record<C
     const sources = [...duProjet, ...demandees.filter((s) => !duProjet.some((p) => p.id === s.id))];
     if (!sources.length) erreur("obs_projet_sans_source", "Ce projet n'a aucune source de collecte : déclarez-en une (alias github, npm, pypi ou site) ou demandez-la à l'opérateur.");
     for (const s of sources) {
-      // shortcut: dernière empreinte inconnue du dépôt, donc « nouveau » à chaque passage ; l'insertion ignore le doublon (source_id, empreinte).
-      const res = await collecterSource({ url: s.urlCanonique, etag: s.etag, derniereEmpreinte: null, politique: await politiqueDeCollecte(s, d.lire) }, transport);
+      // shortcut: « dernière » = dernier instantané créé, un contenu revenu à un état ancien (A B A) ne rafraîchit pas sa date et l'étiquette etat peut mentir (le texte renvoyé reste juste), à revoir dès qu'un code consomme etat.
+      const derniereEmpreinte = await base.derniereEmpreinte(c, s.id);
+      const res = await collecterSource({ url: s.urlCanonique, etag: s.etag, derniereEmpreinte, politique: await politiqueDeCollecte(s, d.lire) }, transport);
       await base.enregistrerCollecte(c, s.id, res);
       const corps = corpsParUrl.get(s.urlCanonique);
       if (corps) for (const v of versionsDe(s.urlCanonique, corps)) versions.set(v.version, v);
@@ -393,7 +395,7 @@ export function routesObservatoire(d: DependancesObservatoire): Partial<Record<C
     const brutes = await base.listerAffirmations(c, projet.id);
     const affirmations = await Promise.all(brutes.map((a) => enContrat(c, a)));
     const fiche = assemblerFiche(projet, affirmations, await base.listerVersions(c, projet.id));
-    // shortcut: le document de tâche natif n'est pas écrit (capacité issue.documents.write absente du manifeste) ; la fiche est renvoyée.
+    // shortcut: fiche renvoyée sans document de tâche (issue.documents.write absente du manifeste, l'ajouter demande l'approbation de la mise à niveau du plugin), à écrire dès qu'une fiche doit rester sur sa tâche.
     return { statut: 200, corps: { slug, projetId: projet.id, langue, cleDocument: `fiche-${slug}-${langue}`, documentEcrit: false, fiche, ...lectureNonFiable(affirmations) } };
   };
 

@@ -76,11 +76,12 @@ function baseMemoire() {
       collectes.push({ companyId: c, sourceId, r });
       // Comme la vraie base : un « nouveau » crée l'instantané, sauf si (source, empreinte) existe déjà.
       if (r.etat === "nouveau" && !pour(instantanes, c).some((i) => i.sourceId === sourceId && i.empreinte === r.empreinte)) {
-        instantanes.push({ companyId: c, id: randomUUID(), sourceId, empreinte: r.empreinte, recupereLe: new Date().toISOString(), texteNormalise: r.texteNormalise, injectionsSignalees: r.injections ?? [] });
+        instantanes.push({ companyId: c, id: randomUUID(), sourceId, empreinte: r.empreinte, empreinteSha256: r.empreinte, recupereLe: new Date().toISOString(), texteNormalise: r.texteNormalise, injectionsSignalees: r.injections ?? [] });
       }
     },
     dernierInstantaneId: async (c: string, sourceId: string, empreinte?: string) =>
       pour(instantanes, c).filter((i) => i.sourceId === sourceId && (!empreinte || i.empreinte === empreinte)).at(-1)?.id ?? null,
+    derniereEmpreinte: async (c: string, sourceId: string) => pour(instantanes, c).filter((i) => i.sourceId === sourceId).at(-1)?.empreinte ?? null,
     sourcesCommunesParUrl: async (c: string, urls: string[]) => pour(sources, c).filter((s) => s.commune === true && s.etat !== "suspecte" && urls.includes(s.urlCanonique)),
     urlDeSource: async (c: string, sourceId: string) => pour(sources, c).find((s) => s.id === sourceId)?.urlCanonique ?? null,
     enregistrerVersions: async (c: string, projetId: string, v: unknown[]) => void versions.push(...v.map((x) => ({ companyId: c, projetId, ...(x as object) }))),
@@ -620,6 +621,18 @@ describe("routes de l'Observatoire", () => {
     expect(w.instantanes).toHaveLength(1);
   });
 
+  it("collecte : un contenu identique au dernier instantané est « inchange » au second passage", async () => {
+    const w = monde();
+    await w.appeler("obs.projet.declarer", OBS, { slug: "rea", nom: "REA", alias: [{ type: "site", valeur: "https://rea.example" }] });
+    w.lireCorps("Licence MIT, texte complet du projet REA.");
+    const etats: string[] = [];
+    for (let passage = 0; passage < 2; passage++) {
+      const corps = (await w.appeler("tache.obs.collecter", OBS, { slug: "rea" }, AGENT)).corps as { sources: Array<{ etat: string }> };
+      etats.push(corps.sources[0]!.etat);
+    }
+    expect(etats).toEqual(["nouveau", "inchange"]);
+  });
+
   it("collecte : une source en échec sans instantané renvoie instantaneId null", async () => {
     const w = monde();
     await w.appeler("obs.projet.declarer", OBS, { slug: "rea", nom: "REA", alias: [{ type: "site", valeur: "https://vide.example" }] });
@@ -870,6 +883,30 @@ describe("obs.article.mettre-sous-porte", () => {
     const e = await w.erreurDe(w.appeler("obs.article.mettre-sous-porte", OBS, { ...corps(T2), maxCycles: 10 }));
     expect(e?.code).toBe("entree_invalide");
     expect(w.hote.portes).toHaveLength(1);
+  });
+
+  it("course : si la création échoue sur l'index unique parce qu'une autre l'a faite, la campagne existante est reprise", async () => {
+    const w = preparer();
+    const { porte, campagnes } = w.hote;
+    const creer = porte.creerCampagne;
+    let lectures = 0;
+    const lire = porte.campagneDuProjet;
+    // Premier appel : la campagne n'existe pas encore ; l'autre appel simultané la crée juste avant notre insertion, qui échoue.
+    porte.campagneDuProjet = async (c, p) => (lectures++ === 0 ? null : lire(c, p));
+    porte.creerCampagne = async (c, p, nom) => { await creer(c, p, nom); throw new Error("duplicate key value violates unique constraint campagnes_projet_uidx"); };
+    const rep = await w.appeler("obs.article.mettre-sous-porte", OBS, corps(T1));
+    expect(rep.statut).toBe(201);
+    expect(campagnes).toHaveLength(1);
+    expect(w.hote.portes[0]).toEqual(expect.objectContaining({ campagneId: campagnes[0]!.id }));
+  });
+
+  it("création en échec sans campagne existante : l'erreur remonte, aucune porte posée", async () => {
+    const w = preparer();
+    w.hote.porte.campagneDuProjet = async () => null;
+    w.hote.porte.creerCampagne = async () => { throw new Error("panne de base"); };
+    const e = await w.erreurDe(w.appeler("obs.article.mettre-sous-porte", OBS, corps(T1)));
+    expect((e as unknown as Error).message).toMatch(/panne de base/u);
+    expect(w.hote.portes).toHaveLength(0);
   });
 
   it("un second appel sur une autre tâche du même projet réutilise la campagne", async () => {

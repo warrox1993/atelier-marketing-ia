@@ -67,6 +67,7 @@ import { exigerLecteurWeb } from "./lecture-web.js";
 import { analyserImport } from "./imports.js";
 import { lireUrl, transportReseau, type TransportHttp } from "./lecture-url.js";
 import { canonique, evaluerPorte, normaliserElement, refusDeFond, revisionsBloqueesSansSource } from "./porte.js";
+import { dechiffrer } from "./chiffrement-donnees.js";
 import { OUTILS_ECRITURE, SERVICE_DU_CANAL, apercuAppel, controlerAppel, estOutilEcriture, preparerPreuve } from "./preuve-approbation.js";
 import { verifierDiffusion } from "./regles-diffusion.js";
 import { chargeEcriture, cleIdempotenceSignee, empreinteArguments, empreinteCle, lireClePrivee, lireClePublique, signerRevocations, verifierEnveloppe, type ChargePreuve } from "./signatures.js";
@@ -1571,6 +1572,29 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
 
   type AppelEnregistre = Awaited<ReturnType<BaseAtelier["listerAppels"]>>[number];
 
+  /** Outils de création de contacts : leurs appels naissent de l'export seulement (valeurs chiffrées, base légale vérifiée). */
+  const OUTILS_CREATION_CRM = ["crm_creer_contact", "pipedrive_creer_personne", "teamleader_creer_contact", "odoo_creer_lead"];
+
+  /**
+   * Un export vers le CRM stocke ses contacts avec les valeurs chiffrées (`scelle: true`, que l'agent ne peut pas poser : l'outil n'a pas cet argument).
+   * Tout lecteur reçoit le clair exact signé ; une valeur que la clé n'ouvre plus reste chiffrée (l'empreinte ne correspond plus : rien n'est approuvable ni signé).
+   */
+  async function appelEnClair<T extends { arguments: Record<string, unknown> }>(companyId: string, a: T): Promise<T> {
+    if (a.arguments["scelle"] !== true || !Array.isArray(a.arguments["contacts"])) return a;
+    const cle = await servicesProspection.clesDonnees!(companyId).then((c) => c.chiffrement, () => null);
+    if (!cle) return a;
+    const ouvrir = (v: unknown) => {
+      if (typeof v !== "string" || !v.startsWith("chv1.")) return v;
+      try {
+        return dechiffrer(v, cle);
+      } catch {
+        return v;
+      }
+    };
+    const contacts = (a.arguments["contacts"] as Array<Record<string, unknown>>).map((c) => ({ ...c, coordonnee: ouvrir(c["coordonnee"]), denomination: ouvrir(c["denomination"]) }));
+    return { ...a, arguments: { contacts } };
+  }
+
   /** Vue d'un appel proposé : aperçu à montrer à l'humain et objet à recopier dans `portee.appel`. */
   function vueAppel(a: AppelEnregistre, revisionCourante: string | null) {
     return {
@@ -1596,6 +1620,7 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
     if (!liv || liv.revisionId !== entree.revisionId) erreur("revision_perimee", "L'appel doit viser la révision courante du livrable.");
     const controle = controlerAppel(entree, liv.corps);
     if (!controle.ok) erreur("entree_invalide", `Appel refusé : ${controle.motif}.`);
+    if (OUTILS_CREATION_CRM.includes(entree.outil)) erreur("entree_invalide", `Appel refusé : « ${entree.outil} » ne se propose pas, son appel exact naît de l'export de prospects (tache.prospects.exporter) et se relit dans le dossier.`);
     let appel = await base.lireAppelParEmpreinte(r.companyId, issue.id, liv.revisionId, controle.empreinte);
     const nouveau = !appel;
     if (!appel) {
@@ -1611,7 +1636,7 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
       });
     }
     if (!appel) erreur("erreur_interne", "Appel proposé non relu.");
-    return { statut: nouveau ? 201 : 200, corps: vueAppel(appel, liv.revisionId) };
+    return { statut: nouveau ? 201 : 200, corps: vueAppel(await appelEnClair(r.companyId, appel), liv.revisionId) };
   };
 
   /** S-7 : révoque des preuves remises, trace chaque révocation (journal et activité native). */
@@ -1793,7 +1818,7 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
       if (p?.appel) {
         // S-1 : l'appel approuvé est un appel PROPOSÉ sur cette révision, montré à l'humain, identique champ par champ.
         const a = p.appel;
-        const propose = await base.lireAppel(companyId, issue.id, a.id);
+        const propose = await base.lireAppel(companyId, issue.id, a.id).then((x) => x && appelEnClair(companyId, x));
         if (!propose || propose.revisionId !== liv.revisionId) erreur("entree_invalide", "L'appel approuvé doit être un appel proposé sur la révision approuvée.");
         if (propose.service !== a.service || propose.outil !== a.outil || propose.compte !== a.compte || propose.empreinte !== a.empreinte) {
           erreur("entree_invalide", "L'appel approuvé ne correspond pas à l'appel proposé (empreinte différente) : rafraîchir l'aperçu avant d'approuver.");
@@ -2613,7 +2638,7 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
       base.listerSources(companyId, { issueId: issue.id }),
       campagne ? base.dernierBrief(companyId, campagne.id) : Promise.resolve(null),
       base.coutsEntreprise(companyId),
-      base.listerAppels(companyId, issue.id),
+      base.listerAppels(companyId, issue.id).then((l) => Promise.all(l.map((a) => appelEnClair(companyId, a)))),
     ]);
     const ciblees = porte ? exigences.filter((e) => porte.exigencesCiblees.includes(e.code)) : exigences;
     const courantes = liv ? couvertures.filter((c) => c.revisionId === liv.revisionId) : [];

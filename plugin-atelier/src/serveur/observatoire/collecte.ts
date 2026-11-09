@@ -147,6 +147,7 @@ export async function collecterSource(
   const texteNormalise = normaliserTexte(lecture.corps, typeNormalisation(lecture.typeContenu));
   if (texteNormalise === "") return { url: s.url, etat: "echec", motif: "contenu vide après normalisation" };
   const emp = empreinte(texteNormalise);
-  if (emp === s.derniereEmpreinte) return { url: s.url, etat: "inchange", empreinte: emp };
-  return { url: s.url, etat: "nouveau", texteNormalise, empreinte: emp, injections: [...injectionsSignalees(texteNormalise), ...signalementInvisibles(lecture.corps)] };
+  const injections = [...injectionsSignalees(texteNormalise), ...signalementInvisibles(lecture.corps)];
+  if (emp === s.derniereEmpreinte) return { url: s.url, etat: "inchange", empreinte: emp, injections };
+  return { url: s.url, etat: "nouveau", texteNormalise, empreinte: emp, injections };
 }

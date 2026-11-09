@@ -6,6 +6,7 @@
 //   pipedrive_personnes          GET   {base}/api/v2/persons?updated_since=…&sort_by=add_time&sort_direction=asc&limit=500&cursor=…
 //   pipedrive_affaires           GET   {base}/api/v2/deals?updated_since=…&sort_by=add_time&sort_direction=asc&limit=500&cursor=…
 //   pipedrive_modifier_personne  PATCH {base}/api/v2/persons/{id}
+//   pipedrive_creer_personne     GET {base}/api/v2/persons/search?term=…&fields=email|phone|name&exact_match=true puis POST {base}/api/v2/persons
 // Pagination v2 : curseur additional_data.next_cursor. Aucun filtre sur la date de création : la période est
 // reconstituée (toute personne créée dans la période a été modifiée depuis son début), au plus 20 pages de 500.
 // Authentification : jeton OAuth (Authorization: Bearer, base = api_domain de la société) ou jeton d'API
@@ -15,11 +16,12 @@ import type { FournisseurService, OutilPasserelle } from "../../fournisseurs.js"
 import { definitionsPipedrive } from "../../commun/social-crm/pipedrive.js";
 import type { AccesPlateforme } from "./autorisation.js";
 import { DateReelle, gabarit, liste, MAX_PAGES_PARCOURUES, nombre, objet, texte, tropDeResultats, verifierAu, verifierPeriode } from "./commun.js";
+import { creationContacts, critereRecherche, estCourriel, nomDuContact, tableau } from "./creation.js";
 import { lire, mutationReelle, type Reconciliation } from "./execution.js";
 import { envoyer, ErreurFournisseur, verifierReponse } from "./http.js";
 import type { DependancesOutils } from "./meta.js";
 
-async function appelPipedrive(dep: DependancesOutils, acces: AccesPlateforme, methode: "GET" | "PATCH", chemin: string, cible: string, corps?: unknown) {
+async function appelPipedrive(dep: DependancesOutils, acces: AccesPlateforme, methode: "GET" | "POST" | "PATCH", chemin: string, cible: string, corps?: unknown) {
   const base = texte(acces.details["base"]);
   const auth = acces.secrets.cleApi
     ? ({ type: "pipedrive_api", jeton: acces.secrets.cleApi } as const)
@@ -161,5 +163,24 @@ export function fournisseurPipedriveReel(dep: DependancesOutils): FournisseurSer
     },
   });
 
-  return { service: "pipedrive", mode: "reel", outils: [personnes, affaires, modifier] };
+  // shortcut: la recherche Pipedrive par nom ne filtre pas le code postal (deux personnes de même nom dans deux communes comptent pour une), à lever si des homonymes sont exportés.
+  const creer = creationContacts(dep, {
+    outil: gabarit(DEFS.pipedrive_creer_personne, "Crée des personnes Pipedrive (POST /api/v2/persons) ; une personne déjà présente (même courriel ou téléphone, sinon même nom) n'est pas recréée. Réponse : { crees: [{ reference, id }], existants: [{ reference, id }] }."),
+    requeteReelle: "GET /api/v2/persons/search puis POST /api/v2/persons",
+  }, {
+    chercher: async (acces, c) => {
+      const k = critereRecherche(c);
+      const q = new URLSearchParams({ term: k.valeur, fields: k.type === "nom" ? "name" : k.type, exact_match: "true", limit: "1" });
+      const r = await appelPipedrive(dep, acces, "GET", `/api/v2/persons/search?${q.toString()}`, "les personnes");
+      const premier = tableau(objet(r["data"])["items"]).map(objet)[0];
+      return premier ? String(nombre(objet(premier["item"])["id"])) : null;
+    },
+    creer: async (acces, c) => {
+      const coordonnee = c.coordonnee === null ? {} : estCourriel(c) ? { emails: [{ value: c.coordonnee, primary: true }] } : { phones: [{ value: c.coordonnee, primary: true }] };
+      const r = await appelPipedrive(dep, acces, "POST", "/api/v2/persons", "les personnes", { name: nomDuContact(c), ...coordonnee });
+      return String(nombre(objet(r["data"])["id"]));
+    },
+  });
+
+  return { service: "pipedrive", mode: "reel", outils: [personnes, affaires, modifier, creer] };
 }
