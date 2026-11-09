@@ -95,13 +95,16 @@ describe("validation de fabriquer_document", () => {
     expect(validerDemandeDocument({ ...base, blocs: [{ type: "image", livrable: "/etc/passwd" }] }).ok).toBe(false);
     expect(validerDemandeDocument({ ...base, blocs: [{ type: "image", livrable: ENTREPRISE_A }] }).ok).toBe(true);
   });
-  it("xlsx : feuilles typées, formule laissée en texte, nombre non fini refusé", () => {
+  it("xlsx : feuilles typées, formule refusée, texte légitime gardé, nombre non fini refusé", () => {
     const x = {
       format: "xlsx", modele: "sobre", titre: "Chiffres", langue: "en",
-      feuilles: [{ nom: "F1", lignes: [[{ type: "texte", valeur: "=SOMME(A1)" }, { type: "nombre", valeur: 3 }, { type: "date", valeur: "2026-10-24" }, { type: "booleen", valeur: true }]] }],
+      feuilles: [{ nom: "F1", lignes: [[{ type: "texte", valeur: "+32 470 12 34 56" }, { type: "nombre", valeur: 3 }, { type: "date", valeur: "2026-10-24" }, { type: "booleen", valeur: true }]] }],
     };
     const r = validerDemandeDocument(x);
-    expect(r.ok && JSON.stringify(r.demande.feuilles)).toContain("=SOMME(A1)");
+    expect(r.ok && JSON.stringify(r.demande.feuilles)).toContain("+32 470 12 34 56");
+    const formule = { ...x, feuilles: [{ nom: "F1", lignes: [[{ type: "texte", valeur: "=SOMME(A1)" }]] }] };
+    const refus = validerDemandeDocument(formule);
+    expect(!refus.ok && refus.erreur).toContain("texte qui ressemble à une formule : calculer le résultat et déposer le nombre ; la fabrique n'écrit aucune formule");
     const infini = { ...x, feuilles: [{ nom: "F1", lignes: [[{ type: "nombre", valeur: Infinity }]] }] };
     expect(validerDemandeDocument(infini).ok).toBe(false);
     const typeFaux = { ...x, feuilles: [{ nom: "F1", lignes: [[{ type: "formule", valeur: "=1" }]] }] };

@@ -36,6 +36,13 @@ POLICES_AUTORISEES: dict[str, tuple[tuple[str, str, str, str], ...]] = {
     "source-serif": (("Titre", "200 900", "100%", SOURCE_SERIF), ("Texte", "100 900", "62% 125%", ARCHIVO)),
 }
 
+# Identifiant -> (famille des titres, famille du texte) pour les documents Office et PDF ; mêmes clés que ci-dessus.
+FAMILLES_DOCUMENT: dict[str, tuple[str, str]] = {
+    "dejavu-sans": ("DejaVu Sans", "DejaVu Sans"),
+    "archivo": ("Archivo", "Archivo"),
+    "source-serif": ("Source Serif 4", "Archivo"),
+}
+
 MOTIF_ID = re.compile(r"[a-z0-9-]{1,64}")
 MOTIF_ENTREPRISE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
 MOTIF_COULEUR = re.compile(r"#[0-9A-Fa-f]{6}")
@@ -172,3 +179,24 @@ def resoudre(identifiant: object, entreprise: object, dossier: str | os.PathLike
         _verifier_logo(logo)
     texte_accent = max((couleurs["fond"], couleurs["texte"]), key=lambda c: contraste(c, couleurs["accent"]))
     return Charte(identifiant, couleurs["fond"], couleurs["texte"], couleurs["accent"], texte_accent, police, logo)
+
+
+def donnees_document(charte: Charte) -> dict:
+    """Ce que le générateur de documents lit (`charte.json`) : couleurs calculées contre le papier BLANC.
+
+    Le papier reste blanc : `fond` ne s'applique pas à la page (une charte sombre rendrait le texte invisible).
+    """
+    blanc, noir_titre = "#ffffff", "#222222"
+    titre = (charte.accent if contraste(charte.accent, blanc) >= CONTRASTE_TEXTE_MIN
+             else charte.texte if contraste(charte.texte, blanc) >= CONTRASTE_TEXTE_MIN else noir_titre)
+    police_titre, police_texte = FAMILLES_DOCUMENT[charte.police]
+    return {
+        "titre": titre,
+        "corps": charte.texte if contraste(charte.texte, blanc) >= CONTRASTE_TEXTE_MIN else "#000000",
+        "entete_fond": charte.accent,
+        "entete_texte": max((blanc, "#000000"), key=lambda c: contraste(c, charte.accent)),
+        "serie": charte.accent if contraste(charte.accent, blanc) >= CONTRASTE_ACCENT_MIN else titre,
+        "police_titre": police_titre,
+        "police_texte": police_texte,
+        "logo": charte.logo is not None,
+    }

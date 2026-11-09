@@ -469,13 +469,43 @@ def _message_validation(erreur: bytes) -> str:
     return texte
 
 
-def _generer_document(demande: dict, entree: Path, sortie: Path, budget: _Budget) -> Path:
+def _charte_document(entreprise: str) -> registre_charte.Charte | None:
+    """Charte `document` du registre de l'entreprise : None si le fichier est absent, échec franc s'il est refusé.
+
+    L'agent n'envoie aucune charte : seule l'absence du fichier laisse le gabarit sobre. Tout autre défaut
+    (fichier invalide, lien symbolique, droit manquant) est un échec « charte refusée », jamais un repli.
+    """
+    dossier = racine_donnees() / DOSSIER_CHARTES
+    try:
+        os.lstat(dossier / entreprise / "document.json")
+    except (FileNotFoundError, NotADirectoryError):
+        return None
+    except OSError as erreur:
+        raise Echec("charte refusée : registre illisible") from erreur
+    try:
+        return registre_charte.resoudre("document", entreprise, dossier, uid_proprietaire=UID_PROPRIETAIRE_LISTE)
+    except registre_charte.CharteRefusee as erreur:
+        raise Echec(f"charte refusée : {erreur}" if "/" not in str(erreur) else "charte refusée") from erreur
+
+
+def _ecrire_entree(chemin: Path, octets: bytes) -> None:
+    fd = os.open(chemin, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "wb") as flux:
+        flux.write(octets)
+
+
+def _generer_document(demande: dict, entree: Path, sortie: Path, budget: _Budget,
+                      charte: registre_charte.Charte | None = None) -> Path:
     """Génère le document Office dans la cage ; rend le fichier produit (docx, xlsx ou pptx)."""
     entree.mkdir(mode=0o700, exist_ok=True)
     sortie.mkdir(mode=0o700, exist_ok=True)
     fd = os.open(entree / "demande.json", os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as flux:
         json.dump(demande, flux, ensure_ascii=False)
+    if charte is not None:
+        _ecrire_entree(entree / "charte.json", json.dumps(registre_charte.donnees_document(charte)).encode())
+        if charte.logo is not None:
+            _ecrire_entree(entree / "logo.png", charte.logo)
     etape = _etape_generateur(entree, sortie, "/entree/demande.json", "/sortie")
     resultat = cage.executer(etape, budget.pour(cage.DELAI_DOCUMENT_S))
     if resultat.delai_depasse:
@@ -579,12 +609,15 @@ def traiter_document(donnees: dict, dossier_travail: Path, dossier_livrable: Pat
     demande = donnees.get("demande")
     if not isinstance(demande, dict):
         raise Echec("demande invalide : objet attendu")
-    fichier = _generer_document(demande, dossier_travail / "entree", dossier_travail / "sortie", budget)
+    charte = _charte_document(donnees["entreprise"])
+    fichier = _generer_document(demande, dossier_travail / "entree", dossier_travail / "sortie", budget, charte)
     _controler_archive(fichier, budget)
     if demande.get("format") == "pdf":
         livre, apercu = _convertir_en_pdf(fichier, dossier_travail, budget)
     else:
         livre, apercu = fichier, _apercu_office(fichier, dossier_travail, budget)
+    if charte is not None:
+        apercu = f"Charte appliquée : {charte.id}\n{apercu}"
     copie = copier_vers_livrable(livre, dossier_livrable)
     ecrire_json_atomique(dossier_livrable / "provenance.json",
                          _provenance_document(donnees, demande["format"], copie))

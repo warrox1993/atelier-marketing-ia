@@ -4,7 +4,10 @@ import hashlib
 import json
 import os
 import shutil
+import struct
 import uuid
+import zipfile
+import zlib
 from pathlib import Path
 
 import pytest
@@ -961,6 +964,155 @@ def test_la_voix_reverifie_le_gpu_avant_chaque_scene(racine, monkeypatch):
     monkeypatch.setattr(service.gpu, "gpu_disponible", lambda *a, **k: verifications.append(1) or (True, "libre"))
     banc.lancer()
     assert len(verifications) == 2  # une vérification par scène (deux scènes)
+
+
+# ---------- charte du registre appliquée aux documents (#67, tâche 2) ----------
+
+CHARTE_DOCUMENT = {"id": "document", "couleurs": {"fond": "#ffffff", "texte": "#1b1b1b", "accent": "#1f6f5c"},
+                   "police": "source-serif", "logo": "logo.png"}
+
+
+def png_minimal() -> bytes:
+    def bloc(genre: bytes, donnees: bytes) -> bytes:
+        return struct.pack(">I", len(donnees)) + genre + donnees + struct.pack(">I", zlib.crc32(genre + donnees))
+
+    lignes = (b"\x00" + b"\xc8\x1e\x1e" * 2) * 2
+    return (b"\x89PNG\r\n\x1a\n" + bloc(b"IHDR", struct.pack(">IIBBBBB", 2, 2, 8, 2, 0, 0, 0))
+            + bloc(b"IDAT", zlib.compress(lignes)) + bloc(b"IEND", b""))
+
+
+def dossier_chartes_acme(racine, monkeypatch):
+    monkeypatch.setenv("FABRIQUE_RACINE", str(racine))
+    dossier = racine / "chartes-autorisees" / "acme"
+    dossier.mkdir(parents=True, exist_ok=True)
+    return dossier
+
+
+def poser_fichier_registre(dossier, nom, contenu):
+    fichier = dossier / nom
+    fichier.write_bytes(contenu if isinstance(contenu, bytes) else json.dumps(contenu).encode())
+    fichier.chmod(0o640)
+    return fichier
+
+
+def poser_document_json(racine, monkeypatch, contenu=CHARTE_DOCUMENT, logo=png_minimal()):
+    dossier = dossier_chartes_acme(racine, monkeypatch)
+    poser_fichier_registre(dossier, "document.json", contenu)
+    if logo is not None:
+        poser_fichier_registre(dossier, "logo.png", logo)
+    return dossier
+
+
+def executer_qui_releve_l_entree(releves, appels=None):
+    """Cage simulée : relève le contenu du dossier d'entrée à chaque appel puis échoue (code 1)."""
+    def executer(etape, delai_s, **options):
+        if appels is not None:
+            appels.append(etape)
+        releves.append({p.name: p.read_bytes() for p in Path(etape.dossier_entree).iterdir()})
+        return service.cage.Resultat(code=1, duree_s=0.1, sortie=b"", erreur=b"", delai_depasse=False)
+    return executer
+
+
+def test_document_sans_document_json_ne_pose_aucune_charte(racine, monkeypatch):
+    dossier_chartes_acme(racine, monkeypatch)  # dossier de l'entreprise présent, document.json absent
+    releves = []
+    monkeypatch.setattr(service.cage, "executer", executer_qui_releve_l_entree(releves))
+    lancer_document(racine)
+    assert [sorted(r) for r in releves] == [["demande.json"]]
+    assert json.loads(releves[0]["demande.json"]) == DEMANDE_DOCX
+
+
+def test_document_avec_document_json_ecrit_charte_et_logo_dans_entree(racine, monkeypatch):
+    logo = png_minimal()
+    poser_document_json(racine, monkeypatch, logo=logo)
+    releves = []
+    monkeypatch.setattr(service.cage, "executer", executer_qui_releve_l_entree(releves))
+    lancer_document(racine)
+    assert [sorted(r) for r in releves] == [["charte.json", "demande.json", "logo.png"]]
+    charte = service.registre_charte.resoudre("document", "acme", racine / "chartes-autorisees", uid_proprietaire=UID)
+    assert json.loads(releves[0]["charte.json"]) == service.registre_charte.donnees_document(charte)
+    assert releves[0]["logo.png"] == logo
+    assert json.loads(releves[0]["demande.json"]) == DEMANDE_DOCX  # la demande de l'agent n'a pas bougé
+
+
+def test_document_json_sans_logo_n_ecrit_pas_de_logo(racine, monkeypatch):
+    poser_document_json(racine, monkeypatch, contenu={k: v for k, v in CHARTE_DOCUMENT.items() if k != "logo"}, logo=None)
+    releves = []
+    monkeypatch.setattr(service.cage, "executer", executer_qui_releve_l_entree(releves))
+    lancer_document(racine)
+    assert [sorted(r) for r in releves] == [["charte.json", "demande.json"]]
+    assert json.loads(releves[0]["charte.json"])["logo"] is False
+
+
+def verifier_charte_refusee(racine, monkeypatch):
+    appels = []
+    monkeypatch.setattr(service.cage, "executer", executer_qui_releve_l_entree([], appels))
+    livrable, etat = lancer_document(racine)
+    assert etat["etat"] == "echec" and etat["message"].startswith("charte refusée") and "/" not in etat["message"]
+    assert appels == []  # aucun repli sobre : la cage n'est même pas lancée
+    assert sorted(p.name for p in livrable.iterdir()) == ["etat.json"]
+
+
+@pytest.mark.parametrize("contenu", [
+    b"pas du json",
+    {**CHARTE_DOCUMENT, "id": "autre"},
+    {**CHARTE_DOCUMENT, "couleurs": {"fond": "#ffffff", "texte": "#f0f0f0", "accent": "#1f6f5c"}},
+    {**CHARTE_DOCUMENT, "police": "comic-sans"},
+    {**CHARTE_DOCUMENT, "champ": 1},
+])
+def test_document_json_invalide_donne_echec_charte_refusee(racine, monkeypatch, contenu):
+    dossier = dossier_chartes_acme(racine, monkeypatch)
+    poser_fichier_registre(dossier, "document.json", contenu)
+    poser_fichier_registre(dossier, "logo.png", png_minimal())
+    verifier_charte_refusee(racine, monkeypatch)
+
+
+@pytest.mark.parametrize("cible", ["autre.json", "n-existe-pas.json"])
+def test_lien_symbolique_document_json_refuse_sans_repli_sobre(racine, monkeypatch, cible):
+    dossier = dossier_chartes_acme(racine, monkeypatch)
+    poser_fichier_registre(dossier, "autre.json", {**CHARTE_DOCUMENT, "id": "document"})
+    poser_fichier_registre(dossier, "logo.png", png_minimal())
+    (dossier / "document.json").symlink_to(cible)
+    verifier_charte_refusee(racine, monkeypatch)
+
+
+@pytest.mark.parametrize("logo", [None, b"", b"pas un png", png_minimal()[:20]])
+def test_logo_manquant_ou_illisible_reference_par_la_charte_donne_echec(racine, monkeypatch, logo):
+    poser_document_json(racine, monkeypatch, logo=logo)
+    verifier_charte_refusee(racine, monkeypatch)
+
+
+@needs_bwrap
+@needs_venv
+def test_apercu_annonce_la_charte_appliquee(racine, monkeypatch):
+    poser_document_json(racine, monkeypatch)
+    livrable, etat = lancer_document(racine)
+    assert etat["etat"] == "termine"
+    assert (livrable / "apercu.txt").read_text().startswith("Charte appliquée : document\n")
+    with zipfile.ZipFile(livrable / "document.docx") as z:
+        assert [n for n in z.namelist() if n.startswith("word/media/")]
+
+
+@needs_bwrap
+@needs_venv
+def test_apercu_sans_charte_reste_celui_d_aujourd_hui(racine, monkeypatch):
+    dossier_chartes_acme(racine, monkeypatch)
+    livrable, etat = lancer_document(racine)
+    assert etat["etat"] == "termine"
+    assert (livrable / "apercu.txt").read_text() == "Essai\nBonjour"
+
+
+@needs_bwrap
+@needs_venv
+def test_provenance_document_inchangee_avec_charte(racine, monkeypatch):
+    poser_document_json(racine, monkeypatch)
+    livrable, etat = lancer_document(racine)
+    assert etat["etat"] == "termine"
+    provenance = json.loads((livrable / "provenance.json").read_text())
+    attendue = service._provenance_document(
+        {"travail": provenance["travail"], "entreprise": "acme"}, "docx",
+        {"fichier": provenance["fichier"], "sha256": provenance["sha256"]})
+    assert provenance == attendue and set(provenance["outils"]) == {"python-docx"}
 
 
 # ---------- type image (lot I1) ----------

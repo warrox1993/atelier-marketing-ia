@@ -1445,6 +1445,8 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
       }
       return { statut: deja.etat === "refusee" ? 403 : 200, corps: deja, rejoue: true };
     }
+    // Création réservée au moteur ; le rejeu ci-dessus reste ouvert, l'agent CRM en tire sa preuve signée.
+    if (entree.cleIdempotence.startsWith("export:moteur:") && acteur.type !== "systeme") erreur("acces_refuse", "Ce préfixe de clé est réservé au moteur de missions.");
     const f = await faitsDiffusion(companyId, issue);
     const { verdict, mode } = await jugerDiffusion(companyId, issue, entree, f, null);
     const id = randomUUID();

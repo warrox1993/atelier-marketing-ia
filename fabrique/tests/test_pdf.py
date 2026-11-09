@@ -36,22 +36,25 @@ from pypdf import PdfReader, PdfWriter  # noqa: E402
 from pypdf.generic import (DictionaryObject, NameObject, TextStringObject)  # noqa: E402
 
 sys.path.insert(0, str(DEPOT))
+from fabrique import registre_charte  # noqa: E402
 from fabrique.cage import Etape, executer  # noqa: E402
 from fabrique.generateurs import pdf as modulepdf  # noqa: E402
 from fabrique.generateurs.pdf import LIMITE_APERCU, convertir  # noqa: E402
 
-from .test_documents import demande_docx, demande_pptx, demande_xlsx  # noqa: E402
+from .test_documents import demande_docx, demande_graphique, demande_pptx, demande_xlsx  # noqa: E402
 
 MONTAGE_CODE = ((str(GENERATEURS), "/code"),)
 
 
-def fabriquer(tmp_path, demande, nom):
-    """Produit un document Office avec le générateur du lot 4 ; rend son chemin."""
+def fabriquer(tmp_path, demande, nom, charte=None):
+    """Produit un document Office avec le générateur du lot 4 (et la charte du service, si donnée) ; rend son chemin."""
     entree = tmp_path / "gen-entree"
     sortie = tmp_path / "gen-sortie"
     entree.mkdir()
     sortie.mkdir()
     (entree / "demande.json").write_text(json.dumps(demande), encoding="utf-8")
+    if charte is not None:
+        (entree / "charte.json").write_text(json.dumps(registre_charte.donnees_document(charte)), encoding="utf-8")
     processus = subprocess.run(
         [str(PYTHON_VENV), "-I", str(GENERATEURS / "documents.py"), str(entree / "demande.json"), str(sortie)],
         capture_output=True, text=True, timeout=120)
@@ -113,6 +116,26 @@ def test_conversion_des_trois_formats(tmp_path, fabrique_demande, nom):
     assert texte.strip()
     if nom.endswith(".docx"):
         assert "Introduction" in texte and "Fin du document." in texte
+
+
+def test_pdf_avec_charte_incorpore_la_police(tmp_path):
+    # Archivo (texte) et Source Serif 4 (titres) ne sont pas dans la cage : le lien /tmp/.fonts les y rend visibles.
+    charte = registre_charte.Charte("document", "#ffffff", "#1b1b1b", "#1f6f5c", "#ffffff", "source-serif", None)
+    travail = fabriquer(tmp_path, demande_docx(), "document.docx", charte=charte)
+    resultat = convertir(travail, "document.docx")
+    assert resultat.ok, resultat.motif
+    polices = subprocess.run(["pdffonts", str(resultat.pdf)], capture_output=True, text=True, timeout=60)
+    assert polices.returncode == 0, polices.stderr
+    assert "Archivo" in polices.stdout and "SourceSerif4" in polices.stdout.replace(" ", ""), polices.stdout
+
+
+def test_pdf_graphique_rendu_avec_la_virgule_belge(tmp_path):
+    travail = fabriquer(tmp_path, demande_graphique(), "document.docx")
+    resultat = convertir(travail, "document.docx")
+    assert resultat.ok, resultat.motif
+    texte = "\n".join(page.extract_text() for page in PdfReader(str(resultat.pdf)).pages)
+    assert "28,5" in texte and "28.5" not in texte, texte
+    assert "Source : Direction financière, comptes provisoires" in texte
 
 
 def test_provenance_info_et_xmp(tmp_path):

@@ -341,6 +341,65 @@ describe("export CRM de production de WF-01 par la vraie route", () => {
     expect((await m.services.routes["tache.prospects.exporter"]!({ cle: "tache.prospects.exporter", params: { issueId: ISSUE }, query: {}, companyId: SOC, acteur: systeme, corps })).statut).toBe(201);
   });
 
+  describe("clé export:moteur: de la route tache.diffusions", () => {
+    const AGENT: ActeurHote = { type: "agent", id: "agent-x", agentId: "agent-x", userId: null, runId: "run-x" };
+    const HUMAIN: ActeurHote = { type: "humain", id: "jb", agentId: null, userId: "jb", runId: null };
+    const demander = (m: ReturnType<typeof monterExport>, acteur: ActeurHote, cleIdempotence: string) =>
+      m.services.routes["tache.diffusions"]!({ cle: "tache.diffusions", params: { issueId: ISSUE }, query: {}, companyId: SOC, acteur, corps: { revisionId: REV1, action: "modifier_crm", canal: "crm", cleIdempotence } });
+    /** La clé réelle du moteur pour ce lot : calculée sur le contenu, donc identique d'un banc à l'autre. */
+    const cleDuMoteur = async () => {
+      const m = monterExport();
+      m.banc.decision({ portee: PORTEE_MODIFIER_CRM });
+      await m.passe([P1, P2]);
+      return m.banc.t.diffusions[0]!.cleIdempotence;
+    };
+
+    it("un agent qui crée une diffusion export:moteur: est refusé, rien n'est écrit", async () => {
+      const m = monterExport();
+      await expect(demander(m, AGENT, "export:moteur:occupee")).rejects.toMatchObject({ code: "acces_refuse" });
+      expect(m.banc.t.diffusions).toHaveLength(0);
+    });
+
+    it("un humain qui crée une diffusion export:moteur: est refusé, rien n'est écrit", async () => {
+      const m = monterExport();
+      await expect(demander(m, HUMAIN, "export:moteur:occupee")).rejects.toMatchObject({ code: "acces_refuse" });
+      expect(m.banc.t.diffusions).toHaveLength(0);
+    });
+
+    it("une clé occupée d'avance ne bloque plus l'export du moteur", async () => {
+      const cle = await cleDuMoteur();
+      expect(cle.startsWith("export:moteur:")).toBe(true);
+      const m = monterExport();
+      await demander(m, AGENT, cle).catch(() => undefined);
+      m.banc.decision({ portee: PORTEE_MODIFIER_CRM });
+      expect(await m.passe([P1, P2])).toEqual({ reussis: [P1, P2], echecs: [], attente: null, execution: null, blocage: null });
+      expect(m.exports).toHaveLength(1);
+    });
+
+    it("un agent rejoue une diffusion export:moteur: créée par le moteur : réponse rejouée, aucune ligne de plus", async () => {
+      const m = monterExport();
+      m.banc.decision({ portee: PORTEE_MODIFIER_CRM });
+      await m.passe([P1, P2]);
+      const creees = m.banc.t.diffusions.length;
+      const r = await demander(m, AGENT, m.banc.t.diffusions[0]!.cleIdempotence);
+      expect((r.corps as { id: string }).id).toBe(m.banc.t.diffusions[0]!.id);
+      expect(m.banc.t.diffusions).toHaveLength(creees);
+    });
+
+    it("une clé export: sans le préfixe moteur reste ouverte à un agent", async () => {
+      const m = monterExport();
+      const r = await demander(m, AGENT, "export:agent-lot-1");
+      expect(r.statut).toBeLessThan(500);
+      expect(m.banc.t.diffusions).toHaveLength(1);
+    });
+
+    it("une variante de casse ou un préfixe voisin n'est pas la clé du moteur", async () => {
+      const m = monterExport();
+      for (const cle of ["EXPORT:moteur:lot-1", "export:moteur2:lot-1"]) await demander(m, AGENT, cle);
+      expect(m.banc.t.diffusions).toHaveLength(2);
+    });
+  });
+
   it("lecture hors entreprise : un identifiant d'une autre entreprise, inconnu ou mal formé est ignoré, jamais lu", async () => {
     const m = monterExport();
     const lus = await m.services.lecturesMoteur!.lireProspectsMoteur!(SOC, [P1, prospect(3).id, IDENTIFIANT_INCONNU, "pas-un-identifiant", P2]);

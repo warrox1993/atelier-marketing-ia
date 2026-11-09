@@ -218,7 +218,12 @@ bwrap --unshare-all --die-with-parent --new-session --clearenv \
 - `blocs` (≤ 2 000) : `titre` (niveau 1-3), `paragraphe` (texte, gras et italique par plages), `liste`, `tableau`
   (≤ 50 colonnes × 2 000 lignes), `saut_de_page`, `image` = **identifiant d'un livrable image déjà produit par la
   fabrique** (jamais un fichier de l'agent).
-- `xlsx` : `feuilles` → cellules typées `texte | nombre | date | booleen`. **Aucune formule en v1** (voir §6.1).
+- `xlsx` : `feuilles` → cellules typées `texte | nombre | date | booleen`. **Aucune formule en v1** : `=`, `+`, `-`, `@` de forme formule et DDE refusés au dépôt (voir §6.1).
+- `graphique` (docx, pptx, pdf ; refusé en xlsx) : `genre` (colonnes, barres, courbe), `titre`, `categories` (50 au
+  plus), `series` (6 au plus, `{nom, valeurs}`, valeurs numériques finies, autant que de catégories), `source`,
+  `texte_remplacement`, `sous_titre` facultatif. Dessiné nativement par la fabrique, jamais une image de l'agent.
+- Charte : la fabrique lit `chartes-autorisees/<entreprise>/document.json` et l'applique d'office ; absente, document
+  sobre ; refusée ou lien symbolique, échec « charte refusée » sans repli. L'agent n'envoie aucune charte.
 - Pas de champ de chemin, d'URL, de lien hypertexte ni de HTML. Texte : UTF-8 valide, caractères de contrôle retirés
   (sauf tabulation et saut de ligne), taille totale ≤ 256 Kio.
 
@@ -239,7 +244,7 @@ bwrap --unshare-all --die-with-parent --new-session --clearenv \
 | Risque | Contre-mesure |
 | --- | --- |
 | XXE, « billion laughs » à la lecture d'un fichier Office | La fabrique **n'ouvre aucun fichier Office fourni par l'agent** : elle n'en génère qu'à partir de JSON, sur ses propres gabarits. `defusedxml` installé (openpyxl l'utilise s'il est présent) **[documenté, à reconfirmer au lot 3]** ; lxml du gabarit lu avec `resolve_entities=False`, `no_network=True`. |
-| Injection de formule ou DDE dans xlsx : openpyxl traite une chaîne qui commence par `=` comme une formule | Toutes les cellules texte sont écrites avec le type chaîne forcé (`data_type = "s"`) ; test avec `=WEBSERVICE(…)`, `=HYPERLINK("file:///…")`, `+cmd|…`, `@SUM(…)`. Formules autorisées plus tard seulement par liste blanche de fonctions sur une grammaire, décision JB n°6. |
+| Injection de formule ou DDE dans xlsx : openpyxl traite une chaîne qui commence par `=` comme une formule | Refus au dépôt (« texte qui ressemble à une formule : calculer le résultat et déposer le nombre »), `+32 470 12 34 56`, `-5 %` et `@marque` restant du texte ; en plus, toutes les cellules texte sont écrites avec le type chaîne forcé (`data_type = "s"`) ; test avec `=WEBSERVICE(…)`, `=HYPERLINK("file:///…")`, `+cmd|…`, `@SUM(…)`. Formules autorisées plus tard seulement par liste blanche de fonctions sur une grammaire, décision JB n°6. |
 | Liens externes, objets OLE, macros dans la sortie | Contrôle de l'archive produite : refus si présence de `vbaProject.bin`, `externalLinks/`, `oleObject`, `activeX`, relations `TargetMode="External"`, types de contenu `macroEnabled`. Extension et type MIME forcés (`.docx` et non `.docm`). |
 | Image piégée | Seules des images issues de la fabrique, ré-encodées en PNG par Pillow dans la cage, dimensions ≤ 4096². |
 

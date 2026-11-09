@@ -1599,7 +1599,7 @@ class ConsignesGP12(unittest.TestCase):
     def test_documents_bureautiques_par_la_fabrique(self):
         # P1-3 (part sans décision laissée par GP6) : les quatre détenteurs marketing ont la fabrique, pas de shell.
         skill = self.texte("organisation/skills/documents-bureautiques/SKILL.md")
-        self.assertIn("Si tu as l'outil `fabriquer_document` (Stratège, Contenus, Mesure, Prospection), tu ne lances ni `python3` ni `soffice`", skill)
+        self.assertIn("Si tu as l'outil `fabriquer_document`, tu ne lances ni `python3` ni `soffice`", skill)
         self.assertIn("`etat_fabrication`", skill)
         reg = bo.registres()[0]
         for a in reg["agents"]:
@@ -1635,6 +1635,17 @@ class ConsignesGP12(unittest.TestCase):
         remise = self.texte("plugin-atelier/src/serveur/fabrique-remise.ts")
         self.assertIn("[page Livrables]", remise)
         self.assertIn("a échoué", remise)
+
+    def test_consignes_charte_automatique_graphique_et_formule(self):
+        # #67 : la charte est posée d'office par la fabrique, le graphique est un bloc natif, la formule reste refusée.
+        skill = self.texte("organisation/skills/documents-bureautiques/SKILL.md")
+        self.assertIn("charte appliquée d'office si elle existe", skill)
+        self.assertIn("bloc `graphique`", skill)
+        self.assertIn("aucune formule", skill)
+        self.assertNotIn("ni charte ni gabarit du client", skill)
+        donnees = self.texte("organisation/skills/visualisation-donnees/SKILL.md")
+        self.assertIn("`fabriquer_document`", donnees)
+        self.assertIn("bloc `graphique`", donnees)
 
 
 class RestesDH1(unittest.TestCase):
@@ -1695,7 +1706,7 @@ class RestesDH1(unittest.TestCase):
         agents = json.loads((RACINE / "organisation/registre/agents.json").read_text(encoding="utf-8"))
         services = json.loads((RACINE / "organisation/registre/services.json").read_text(encoding="utf-8"))
         self.assertEqual((agents["version"], agents["dateVersion"]), ("1.18.0", "2026-11-09"))  # documents-bureautiques à prospection (#63)
-        self.assertEqual((services["version"], services["dateVersion"]), ("1.3.0", "2026-11-07"))
+        self.assertEqual((services["version"], services["dateVersion"]), ("1.4.0", "2026-11-09"))  # fabriqueDocuments à 13 rôles de services (#65)
 
     def test_rotation_de_session_du_coordinateur(self):
         # T03 (lot 2) : le coordinateur repart d'une session neuve tous les 5 runs.
@@ -1977,15 +1988,62 @@ class DecisionsUsine(unittest.TestCase):
             ("production", "production"), ("qualite", "qualite"), ("recherche-innovation", "rdi"),
             ("recouvrement", "recouvrement"), ("ressources-humaines", "rh"), ("sav-sinistres", "sav"),
             ("service-client", "service-client"), ("services-generaux", "services-generaux"))),
-        "commercial/appels-offres", "commercial/pilotage-commercial", "commercial/propositions",
-        "communication/editorial-institutionnel", "comptabilite-finance/cloture-reporting",
-        "comptabilite-finance/controle-gestion", "direction/secretariat-instances", "direction/synthese",
-        "direction/tableau-de-bord", "donnees-bi/analyste-donnees", "donnees-bi/tableaux-de-bord", "evenementiel/bilan-suivi",
+        "commercial/pilotage-commercial", "evenementiel/bilan-suivi")  # #65 : les 13 autres rôles ont la fabrique
+
+    # #65 : rôles de services retenus par l'opérateur pour Word, PowerPoint et Excel (un rôle s'ajoute ou se retire par une ligne du registre).
+    RETENUS_FABRIQUE = (
+        "commercial/appels-offres", "commercial/propositions", "communication/editorial-institutionnel",
+        "comptabilite-finance/cloture-reporting", "comptabilite-finance/controle-gestion", "direction/secretariat-instances",
+        "direction/synthese", "direction/tableau-de-bord", "donnees-bi/analyste-donnees", "donnees-bi/tableaux-de-bord",
         "gestion-projets/reporting-comites", "qualite/revue-direction", "ressources-humaines/indicateurs-rh")
 
+    def test_services_retenus_ont_outil_skill_et_consigne(self):
+        self.assertEqual(len(self.RETENUS_FABRIQUE), 13)
+        services = {s["slug"]: s for s in bo.registre_services()["services"]}
+        reg_agents = bo.registres()[0]
+        client = bo.OUTILS_CLIENT_FABRIQUE
+        # Liste exacte déclarée au registre.
+        declares = sorted(f"{s['slug']}/{slug}" for s in services.values() for slug, r in s.get("reglages", {}).items()
+                          if r.get("fabriqueDocuments") is True)
+        self.assertEqual(declares, sorted(self.RETENUS_FABRIQUE))
+        for chemin in self.RETENUS_FABRIQUE:
+            svc, slug = chemin.split("/")
+            agents, _, _ = bo.agents_service(reg_agents, services[svc])
+            a = next(x for x in agents if x["slug"] == slug)
+            self.assertIn(client["document"], a["outils"]["mutation"], chemin)
+            self.assertIn(client["etat"], a["outils"]["mutation"], chemin)
+            self.assertIn("documents-bureautiques", a["competences"], chemin)
+            texte = (bo.ORGA / "services" / svc / "agents" / slug / "AGENTS.md").read_text(encoding="utf-8")
+            self.assertIn("documents-bureautiques", bo.competences_entete(texte, svc, slug), chemin)
+            haut = texte.split(bo.MARQUEUR_CONSIGNES_COMMUNES)[0]
+            for mot in ("Word", "PowerPoint", "Excel", "fabriquer_document"):
+                self.assertIn(mot, haut, f"{chemin} : {mot}")
+
+    def test_aucun_agent_non_retenu_n_a_l_outil(self):
+        reg_agents = bo.registres()[0]
+        client = bo.OUTILS_CLIENT_FABRIQUE
+        vus = set()
+        for s in bo.registre_services()["services"]:
+            if s["slug"] == "marketing":
+                continue
+            agents, _, _ = bo.agents_service(reg_agents, s)
+            for a in agents:
+                chemin = f"{s['slug']}/{a['slug']}"
+                autorises = a["outils"]["recherche"] + a["outils"]["mutation"]
+                vus.add(chemin)
+                retenu = chemin in self.RETENUS_FABRIQUE
+                for genre in ("document", "etat"):
+                    self.assertEqual(client[genre] in autorises, retenu, f"{chemin} {genre}")
+                    self.assertEqual(client[genre] in a["outils"]["interdits"], not retenu, f"{chemin} {genre}")
+                for genre in ("video", "image", "voir"):
+                    self.assertNotIn(client[genre], autorises, f"{chemin} {genre}")
+                    self.assertIn(client[genre], a["outils"]["interdits"], f"{chemin} {genre}")
+        self.assertLessEqual(set(self.RETENUS_FABRIQUE), vus)
+        self.assertGreater(len(vus), 200)
+
     def test_p13_documents_bureautiques_retire_aux_agents_sans_fabrique(self):
-        # Décision : retirer le skill aux 43 agents sans shell ni fabrique ; Stratège, Contenus, Mesure et Prospection l'ont.
-        self.assertEqual(len(set(self.SANS_FABRIQUE)), 43)
+        # Décision : retirer le skill aux 30 agents sans shell ni fabrique ; Stratège, Contenus, Mesure et Prospection l'ont.
+        self.assertEqual(len(set(self.SANS_FABRIQUE)), 30)
         for chemin in self.SANS_FABRIQUE:
             svc, slug = chemin.split("/")
             fichier = bo.ORGA / "services" / svc / "agents" / slug / "AGENTS.md"

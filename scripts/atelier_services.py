@@ -252,6 +252,8 @@ def valider(registre) -> list[str]:
                 if env is not None and not (isinstance(env, dict) and all(
                         k in ENV_SURCHARGEABLES and isinstance(v, str) for k, v in env.items())):
                     erreurs.append(f"{pre}« {slug} » : envPortable doit surcharger, en texte, une variable parmi {sorted(ENV_SURCHARGEABLES)}")
+                if "fabriqueDocuments" in r and type(r["fabriqueDocuments"]) is not bool:
+                    erreurs.append(f"{pre}« {slug} » : fabriqueDocuments doit être true ou false")
                 n = r.get("sessionsParRotation")
                 if n is not None and not (type(n) is int and 1 <= n <= 50):
                     erreurs.append(f"{pre}« {slug} » : sessionsParRotation doit être un entier de 1 à 50")

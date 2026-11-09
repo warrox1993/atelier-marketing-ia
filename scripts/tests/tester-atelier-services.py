@@ -328,6 +328,14 @@ class TestRefus(unittest.TestCase):
             outilsInterdits=["WebFetch"],
             reglages={"autre-aaa": {"modele": {"id": "claude-opus-5-5", "effort": "high"}, "outilsInterdits": ["Write"]}})), [])
 
+    def test_reglage_fabrique_documents_doit_etre_vrai_ou_faux(self):
+        """#65 : le droit de fabriquer des documents est un booléen strict (« true » en texte, 1 ou null ne comptent pas)."""
+        for valeur in ("true", 1, None, ["x"]):
+            e = self.erreurs(lambda r: r["services"][0].update(reglages={"autre-aaa": {"fabriqueDocuments": valeur}}))
+            self.contient(e, "« autre-aaa » : fabriqueDocuments doit être true ou false")
+        for valeur in (True, False):
+            self.assertEqual(self.erreurs(lambda r: r["services"][0].update(reglages={"autre-aaa": {"fabriqueDocuments": valeur}})), [])
+
     def test_projets_et_routines(self):
         """P1-5 : projets et routines d'un service, facultatifs, contrôlés comme ceux du marketing."""
         projet = {"slug": "cadence", "responsable": "coord-aaa", "statut": "in_progress", "couleur": "#2f6f5e", "objectifs": []}
@@ -541,6 +549,37 @@ class TestPorteDeterministe(unittest.TestCase):
         self.assertNotIn("Edit(./**)", config["extraArgs"])
         self.assertNotIn("WebFetch", config["extraArgs"][: config["extraArgs"].index("--disallowedTools")])
 
+    def agents_avec_droit(self, service, slug_retenu):
+        """Agents d'un service dont un seul (slug_retenu) reçoit le droit de fabrique, sans toucher au registre réel."""
+        s = json.loads(json.dumps(self.services[service]))
+        for r in s.get("reglages", {}).values():
+            r.pop("fabriqueDocuments", None)  # indépendant des rôles retenus au registre réel
+        s.setdefault("reglages", {}).setdefault(slug_retenu, {})["fabriqueDocuments"] = True
+        agents, _, _ = self.bo.agents_service(self.reg_agents, s)
+        return {a["slug"]: a for a in agents}
+
+    def test_agent_retenu_a_les_deux_outils_et_pas_les_autres(self):
+        client = self.bo.OUTILS_CLIENT_FABRIQUE
+        a = self.agents_avec_droit("direction", "synthese")["synthese"]
+        for genre in ("document", "etat"):
+            self.assertIn(client[genre], a["outils"]["mutation"], genre)
+            self.assertNotIn(client[genre], a["outils"]["interdits"], genre)
+        for genre in ("video", "image", "voir"):
+            self.assertIn(client[genre], a["outils"]["interdits"], genre)
+            self.assertNotIn(client[genre], a["outils"]["recherche"] + a["outils"]["mutation"], genre)
+        self.assertEqual(self.bo.agents_fabrique(self.bo.reg_agents_service(self.reg_agents, [a])),
+                         {"document": {"synthese"}, "video": set(), "image": set(), "voir": set()})
+
+    def test_agent_voisin_du_meme_service_n_a_rien(self):
+        client = self.bo.OUTILS_CLIENT_FABRIQUE
+        agents = self.agents_avec_droit("direction", "synthese")
+        for slug, a in agents.items():
+            if slug == "synthese":
+                continue
+            for genre, outil in client.items():
+                self.assertNotIn(outil, a["outils"]["recherche"] + a["outils"]["mutation"], f"{slug} {genre}")
+                self.assertIn(outil, a["outils"]["interdits"], f"{slug} {genre}")
+
     def test_autres_services_sans_deterministe(self):
         agents, _, _ = self.bo.agents_service(self.reg_agents, self.services["juridique"])
         self.assertFalse([a["slug"] for a in agents if a.get("deterministe")])
@@ -580,8 +619,8 @@ class TestCadenceService(unittest.TestCase):
         cls.reg_agents, cls.reg_orga = cls.bo.registres()
         cls.services = {s["slug"]: s for s in cls.bo.registre_services()["services"]}
 
-    def paquet(self, slug):
-        bo, s = self.bo, self.services[slug]
+    def paquet(self, slug, service=None):
+        bo, s = self.bo, service or self.services[slug]
         agents, corps, _ = bo.agents_service(self.reg_agents, s)
         reg_s = bo.organisation_service(self.reg_orga, {"slug": "essai", "mode": "reel"}, s, f"Essai {slug}",
                                         f"atelier-client:essai:{slug}")
@@ -628,7 +667,7 @@ class TestCadenceService(unittest.TestCase):
 
     def faux_socle(self, reg_agents_s):
         bo = self.bo
-        etat = {"projets": [], "routines": [], "journal": [], "imports": []}
+        etat = {"projets": [], "routines": [], "journal": [], "imports": [], "plugin": None, "sortie": ""}
         ids = {a["slug"]: {"id": f"id-{a['slug']}", "name": a["nom"]} for a in reg_agents_s["agents"]}
 
         class Api:
@@ -638,6 +677,17 @@ class TestCadenceService(unittest.TestCase):
                 return self.appel("GET", chemin)
 
             def appel(self, methode, chemin, corps=None):
+                if "/plugins/" in chemin and chemin.split("?")[0].endswith("/config"):
+                    if etat.get("erreur_plugin"):
+                        raise bo.ErreurAtelier(etat["erreur_plugin"])
+                    # Comme l'hôte : 404 tant que le plugin n'est pas installé (etat["plugin"] = None).
+                    if etat["plugin"] is None:
+                        raise bo.ErreurAtelier(f"{methode} {chemin} -> HTTP 404 : plugin introuvable")
+                    if methode == "GET":
+                        return {"configJson": dict(etat["plugin"])}
+                    etat["plugin"] = dict(corps["configJson"])
+                    etat["journal"].append((methode, chemin, corps))
+                    return {}
                 if methode == "GET" and chemin.endswith("/projects"):
                     return [dict(p) for p in etat["projets"]]
                 if methode == "GET" and chemin.endswith("/routines"):
@@ -684,18 +734,21 @@ class TestCadenceService(unittest.TestCase):
         self.addCleanup(lambda: [setattr(bo, n, v) for n, v in sauve.items()])
         return Api(), etat
 
-    def appliquer(self, slug):
+    def appliquer(self, slug, service=None):
         import contextlib
         import io
         import tempfile
-        reg_agents_s, reg_s, fichiers = self.paquet(slug)
+        reg_agents_s, reg_s, fichiers = self.paquet(slug, service)
         api, etat = self.faux_socle(reg_agents_s)
         dossier = Path(tempfile.mkdtemp(prefix="atelier-test-cadence-etat-"))
         self.addCleanup(shutil.rmtree, dossier, ignore_errors=True)
 
         def lancer():
-            with contextlib.redirect_stdout(io.StringIO()):
-                return self.bo.appliquer_service(api, reg_agents_s, reg_s, fichiers, "reel", dossier)
+            tampon = io.StringIO()
+            with contextlib.redirect_stdout(tampon):
+                resultat = self.bo.appliquer_service(api, reg_agents_s, reg_s, fichiers, "reel", dossier)
+            etat["sortie"] = tampon.getvalue()
+            return resultat
         return lancer, etat
 
     def test_observatoire_importe_un_projet_et_quatre_routines_en_pause(self):
@@ -731,6 +784,84 @@ class TestCadenceService(unittest.TestCase):
         lancer, etat = self.appliquer("juridique")
         lancer()
         self.assertEqual((etat["projets"], etat["routines"], etat["journal"]), ([], [], []))
+
+
+class TestFabriqueDocumentsServices(TestCadenceService):
+    """#65 : appliquer_service écrit la liste des agents autorisés à fabriquer des documents, jamais de politique.
+    (Hérite des outils du faux socle ; ses propres tests sont désactivés ci-dessous.)"""
+
+    def service_avec(self, retenus):
+        s = json.loads(json.dumps(self.services["direction"]))
+        for r in s.get("reglages", {}).values():
+            r.pop("fabriqueDocuments", None)  # indépendant des rôles retenus au registre réel
+        for slug in retenus:
+            s.setdefault("reglages", {}).setdefault(slug, {})["fabriqueDocuments"] = True
+        return s
+
+    def test_appliquer_service_ecrit_les_agents_autorises(self):
+        lancer, etat = self.appliquer("direction", self.service_avec(["synthese"]))
+        etat["plugin"] = {"autre": 1}
+        lancer()
+        self.assertEqual(etat["plugin"]["fabriqueAgentsDocuments"], ["id-synthese"])
+        self.assertEqual((etat["plugin"]["fabriqueAgentsVideo"], etat["plugin"]["fabriqueAgentsImage"]), ([], []))
+        self.assertEqual(etat["plugin"]["autre"], 1)
+        self.assertEqual([m for m, c, _ in etat["journal"]], ["POST"])
+        self.assertTrue(all("/plugins/" in c for _, c, _ in etat["journal"]), etat["journal"])
+        lancer()  # rejeu : rien de plus à écrire
+        self.assertEqual(len(etat["journal"]), 1)
+
+    def test_aucune_politique_sur_une_entreprise_de_service(self):
+        lancer, etat = self.appliquer("direction", self.service_avec(["synthese"]))
+        etat["plugin"] = {}
+        lancer()
+        self.assertEqual([c for _, c, _ in etat["journal"] if "/tools/policies" in c], [])
+
+    def test_retrait_du_droit_vide_la_liste(self):
+        lancer, etat = self.appliquer("direction", self.service_avec(["synthese", "tableau-de-bord"]))
+        etat["plugin"] = {}
+        lancer()
+        self.assertEqual(etat["plugin"]["fabriqueAgentsDocuments"], ["id-synthese", "id-tableau-de-bord"])
+        lancer2, etat2 = self.appliquer("direction", self.service_avec([]))
+        etat2["plugin"] = dict(etat["plugin"])
+        lancer2()
+        self.assertEqual(etat2["plugin"]["fabriqueAgentsDocuments"], [])
+
+    def test_plugin_absent_avertit_et_continue(self):
+        lancer, etat = self.appliquer("direction", self.service_avec(["synthese"]))
+        self.assertIsNone(etat["plugin"])  # le double répond 404 comme l'hôte
+        self.assertEqual(lancer(), "cid-essai")
+        self.assertIn("avertissement : fabrique non configurée", etat["sortie"])
+        self.assertIn("plugin atelier.marketing-ia introuvable : installez-le d'abord", etat["sortie"])
+        self.assertEqual(etat["journal"], [])
+
+    def test_commande_d_autorisation_affichee_si_un_role_est_retenu(self):
+        lancer, etat = self.appliquer("direction", self.service_avec(["synthese"]))
+        etat["plugin"] = {}
+        lancer()
+        self.assertIn("sudo bash scripts/installer-fabrique.sh --autoriser-entreprise cid-essai", etat["sortie"])
+
+    def test_aucune_commande_d_autorisation_sans_role_retenu(self):
+        lancer, etat = self.appliquer("direction", self.service_avec([]))
+        etat["plugin"] = {}
+        lancer()
+        self.assertNotIn("autoriser-entreprise", etat["sortie"])
+
+    def test_erreur_http_500_du_plugin_remonte(self):
+        lancer, etat = self.appliquer("direction", self.service_avec(["synthese"]))
+        etat["erreur_plugin"] = "GET /plugins/x/config -> HTTP 500 : erreur interne"
+        with self.assertRaises(self.bo.ErreurAtelier) as ctx:
+            lancer()
+        self.assertIn("HTTP 500", str(ctx.exception))
+
+    def test_schema_refuse_par_un_ancien_plugin_avertit_et_continue(self):
+        lancer, etat = self.appliquer("direction", self.service_avec(["synthese"]))
+        etat["erreur_plugin"] = "POST /plugins/x/config -> HTTP 400 : additionalProperties"
+        self.assertEqual(lancer(), "cid-essai")
+        self.assertIn("avertissement : fabrique non configurée", etat["sortie"])
+
+
+for _nom in [n for n in vars(TestCadenceService) if n.startswith("test_")]:
+    setattr(TestFabriqueDocumentsServices, _nom, None)  # pas de rejeu des tests hérités
 
 
 class TestRubriques(unittest.TestCase):

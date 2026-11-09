@@ -45,7 +45,7 @@ Les deux correctifs `0078` (`fix-atelier-un-agent-ne-detache…`) et `0164` (`fi
 | 0019 | traduction en français des écrans natifs | Traduit en français le détail d'une tâche, la carte d'interaction du fil, les actions de revue bloquée, le tableau de bord et ses graphiques (libellés, infobulles, aria-label, notifications). | Garder avec test | Base `i18n/index.ts:6-15`, `i18n/locales.ts:5` (langue figée sur `en`) ; `fr.json` à 5 clés ; aucun `t()` dans `IssueDetail.tsx` ni `Dashboard.tsx`. Tests `review-policy.test.ts`, `ActivityCharts.test.tsx`, `IssueThreadInteractionCard.test.tsx`, `IssueDetail.test.tsx`. | Le mécanisme natif existe mais ne couvre pas ces écrans : les passer par `t()` exigerait autant de correctifs ; aucun écran remplaçable par le plugin. |
 | 0021 | l'atelier marketing en tête du menu et page d'accueil | Place les entrées de plugin au-dessus de « New Task » ; ouvre `/atelier` à l'ouverture de l'entreprise quand le plugin est prêt. | Garder avec test | Base `Sidebar.tsx:148-166` (« New Task » en tête) et `:255`, `:306` (entrées de plugin rendues plus bas) ; `App.tsx:156` (accueil figé sur `dashboard`). Tests `Sidebar.test.tsx`, `CompanyHomeRedirect.test.tsx`. | L'emplacement `sidebar` existe (SDK constantes `:1123`) mais ni l'ordre du menu ni la page d'accueil ne se règlent depuis un plugin. |
 | 0025 | barre latérale et tableau de bord traduits | Traduit la barre latérale (Nouvelle tâche, Rechercher, Boîte de réception…), les heures relatives et les dates des graphiques (fr-BE), le panneau des exécutions actives. | Garder avec test | Base `Sidebar.tsx:148-238` (libellés en dur), `i18n/locales.ts:5`. Tests `Sidebar.test.tsx`, `ActiveAgentsPanel.test.tsx`, `ActivityCharts.test.tsx`. | Même raison que 0019 : libellés en dur dans des écrans natifs. |
-| 0027 | « Nouvelle tâche » ouvre la Discussion de l'atelier | Quand le plugin est prêt, le bouton « Nouvelle tâche » ouvre la Discussion de l'atelier au lieu du dialogue de création. | Déplacer dans le plugin | Entrée `sidebar` avec l'action `navigate` (SDK constantes `:1123`, `:1202-1203`). Le bouton natif (base `Sidebar.tsx:148-166`) ne peut pas être intercepté. Test `Sidebar.test.tsx`. | Le plugin ajoute sa propre entrée vers la Discussion, le bouton natif reste inchangé : changement de comportement à décider par l'opérateur dans l'issue #38. |
+| 0027 | « Nouvelle tâche » ouvre la Discussion de l'atelier | Quand le plugin est prêt, le bouton « Nouvelle tâche » ouvre la Discussion de l'atelier au lieu du dialogue de création. | Garder avec test | `paperclip/ui/src/components/Sidebar.test.tsx` fige le comportement (cas de 0027, 0081, 0086, 0161). Décision du 09/11/2026, en fin de document. | Aucun déplacement : deux entrées au lieu d'une, sans gain réel. |
 | 0088 | cartes « Extraction de sites » et « Audit de pages » | Ajoute deux cartes de galerie (`atelier-extraction`, `atelier-audit`). | Garder avec test (09/11/2026, voir la fin du document) | Idem 0003 : base `Browse.tsx:861-862`, `:1483-1487`. | Données de galerie, remplacées par le connecteur personnalisé. |
 | 0089 | carte « E-mailing » (listmonk local) | Ajoute la carte `atelier-emailing`. | Garder avec test (09/11/2026, voir la fin du document) | Idem 0003. | Donnée de galerie, remplacée par le connecteur personnalisé. |
 | 0090 | carte « Captation de prospects » | Ajoute la carte `atelier-captation` (pages de destination). | Garder avec test (09/11/2026, voir la fin du document) | Idem 0003. | Donnée de galerie, remplacée par le connecteur personnalisé. |
@@ -75,8 +75,8 @@ Les deux correctifs `0078` (`fix-atelier-un-agent-ne-detache…`) et `0164` (`fi
 | Décision | Nombre | Correctifs |
 | --- | --- | --- |
 | Retirer (natif) | 0 | aucun (7 au départ, gardés le 09/11/2026) |
-| Déplacer dans le plugin | 1 | 0027 |
-| Garder avec test | 30 | 0001, 0002, 0003, 0004, 0005, 0006, 0009, 0010, 0011, 0012, 0013, 0014, 0015, 0016, 0017, 0018, 0019, 0020, 0021, 0022, 0023, 0024, 0025, 0026, 0030, 0046, 0088, 0089, 0090, 0091 |
+| Déplacer dans le plugin | 0 | aucun (0027 gardé le 09/11/2026) |
+| Garder avec test | 31 | 0001, 0002, 0003, 0004, 0005, 0006, 0009, 0010, 0011, 0012, 0013, 0014, 0015, 0016, 0017, 0018, 0019, 0020, 0021, 0022, 0023, 0024, 0025, 0026, 0027, 0030, 0046, 0088, 0089, 0090, 0091 |
 | Total | 31 | 17 feat, 12 fix, 2 test |
 
 Constats à retenir :
@@ -84,7 +84,7 @@ Constats à retenir :
 - **Le natif couvre ce qui est de la donnée.** Les 7 correctifs retirables sont tous des cartes de galerie. Perte connue : les libellés et icônes français de la galerie. L'essai est dans l'issue #37. Deux correctifs voisins restent : 0003 (code serveur de la passerelle : sonde, mode démonstration, exception HTTPS) et 0004 (« Ask first » par défaut sur les écritures : le natif laisse tout autorisé), car ni le natif ni le plugin ne les remplacent. Constat infirmé le 09/11/2026 : voir la fin du document.
 - **Le plugin ne couvre pas ce qui doit refuser avant d'écrire.** Les gardes (0001, 0006, 0012, 0013, 0022) et les contrôles de run (0002, 0010, 0011, 0026) restent dans le moteur, faute de crochet bloquant dans le SDK.
 - **Les écrans natifs ne se remplacent pas depuis un plugin.** Les 10 correctifs d'interface (0014, 0015, 0017, 0018, 0019, 0020, 0021, 0023, 0024, 0025) sont gardés ; la traduction native est présente mais la langue est figée sur l'anglais et les écrans visés n'ont pas de `t()`.
-- **Un seul déplacement possible : 0027**, au prix d'un changement de comportement (deux entrées au lieu d'une). Issue #38.
+- **Aucun déplacement retenu.** 0027 se déplacerait au prix de deux entrées au lieu d'une, sans gain réel : voir la décision du 09/11/2026 en fin de document. Issue #38.
 - **Tests manquants** : le câblage dans `heartbeat.ts` de 0002 (inventaire des compétences) et de 0012 (escalier d'effort). Issue #39.
 - **0046** ne porte plus que son test : son code est déjà natif.
 
@@ -93,8 +93,8 @@ Constats à retenir :
 | Issue | Décision | Contenu |
 | --- | --- | --- |
 | #37 | Passer au natif | Essai du connecteur personnalisé natif, décision de l'opérateur sur la perte des libellés, retrait des 7 correctifs de cartes (0005, 0009, 0016, 0088 à 0091), à condition d'un « Ask first » prouvé sur les écritures du connecteur personnalisé (0004 reste) ; réexamen de 0003 si toutes les cartes partent. Décidé le 09/11/2026 : pas de retrait, voir la fin du document. |
-| #38 | Déplacer dans le plugin | Entrée `sidebar` du plugin vers la Discussion, retrait de 0027 après accord de l'opérateur. |
-| #39 | Figer par des tests | Deux tests de câblage dans `heartbeat.ts` (0002 et 0012), plus un test qui fige « Ask first » sur les écritures d'un connecteur personnalisé de la passerelle (0004 ; les tests actuels visent les cartes `atelier-`). |
+| #38 | Garder avec test | 0027 gardé, décision du 09/11/2026 en fin de document. |
+| #39 | Figer par des tests | Tests de dispatch du câblage dans `heartbeat.ts` (0002 et 0012), dans `tests/socle/atelier-cablage.test.ts`. Le test « Ask first » sur un connecteur personnalisé est retiré : « Ask first » dépend du préfixe `atelier-` (sans carte, aucune suggestion), le natif le fige déjà (`generic-mcp-connection.test.ts:492`) et sa raison d'être a disparu avec la décision du 09/11/2026 de garder les 7 correctifs de cartes. |
 
 ## Correction du 09/11/2026 : les 7 correctifs de cartes sont gardés
 
@@ -105,3 +105,13 @@ Décision de l'opérateur, après une étude en lecture seule (détail et preuve
 - Sans carte, les consignes de connexion ne sont pas posées et l'agent ne peut pas demander la connexion (`paperclip/server/src/services/connection-intents.ts:415`, `:606`).
 
 Reste à faire à la prochaine montée de version du socle : retirer les cartes FSMA et B2C de 0009, qu'aucun rôle ne déclare et qui n'ont pas d'outil dans la passerelle. Non vérifié : aucun essai réel du connecteur personnalisé.
+
+## Correction du 09/11/2026 : 0027 gardé avec test (#38)
+
+Choix par défaut annoncé à l'opérateur, qui a ensuite demandé de continuer en autonomie. Le déplacement reste possible sur sa demande écrite.
+
+- Le gain serait presque nul : `paperclip/ui/src/components/Sidebar.tsx` reste modifié par 14 autres correctifs (0021, 0025, 0033, 0034, 0039, 0048, 0059, 0071, 0077, 0081, 0086, 0160, 0161, 0173).
+- Retirer 0027 ne suffit pas : 0081 (libellé), 0086 (pastille des décisions) et 0161 (libellé « Chat ») reposent sur les mêmes lignes, et la barre mobile (0039, 0082, « Discuter ») garderait son correctif.
+- L'usage se dégraderait : deux entrées au lieu d'une, et une tâche créée à la main ne passerait plus par le coordinateur, ni par son cadrage et son mandat.
+
+Reste vrai : `docs/guide-utilisateur.md:10` et `:109` disent encore « Nouvelle tâche » alors que l'interface affiche « Chat » et « Discuter ».

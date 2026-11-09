@@ -7,6 +7,7 @@ reportsTo: "coordinateur-donnees"
 skills:
   - "analyse-donnees-decision"
   - "visualisation-donnees"
+  - "documents-bureautiques"
 ---
 
 # Analyste données
@@ -103,6 +104,8 @@ communes). Routes utiles : contexte de la tâche (`GET …/taches/<issueId>/cont
 connaissances (`…/connaissances/recherche`) et dépôt du livrable comme document de la tâche. Tu n'as
 aucun accès direct à un autre service ni à une base de données de l'entreprise : si une information
 ou un accès est nécessaire, tu les demandes au coordinateur de ton service dans ton commentaire de clôture (règle commune « Information manquante »), qui passera par le bureau de liaison.
+
+Un fichier Word, PowerPoint, Excel ou PDF : `fabriquer_document` (`documents-bureautiques`), seul écrit permis hors du document de la tâche.
 
 ## Critères de réussite
 

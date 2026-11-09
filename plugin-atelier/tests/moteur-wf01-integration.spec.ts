@@ -15,7 +15,7 @@ import { creerOutilsMoteur } from "../src/moteur/outils.js";
 import type { RequeteRoute } from "../src/serveur/atelier.js";
 import type { BaseAtelier } from "../src/serveur/base.js";
 import { routesDiscussion } from "../src/serveur/services-discussion.js";
-import { GABARIT, P1, P2, P3, PHZ, SOC, approbationNative, h, monter, type OptionsBanc } from "./moteur-wf01-doubles.js";
+import { GABARIT, P1, P2, P3, P4, PHZ, SOC, SOURCE_AUTRE, SOURCE_COLLECTE, approbationNative, h, monter, prospect, type OptionsBanc } from "./moteur-wf01-doubles.js";
 
 type Ligne = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 const LIMITES = ["aucune limite"];
@@ -78,7 +78,7 @@ describe("WF-01 de bout en bout (étapes en code, outils et approbation natifs r
     const t = await monterChaine();
     await t.jusquAutorisation();
     expect(t.etat()).toBe("attente_autorisation");
-    expect(t.etape(3).sortie).toEqual({ prospectIds: [P1, P2, P3], doublons: [] });
+    expect(t.etape(3).sortie).toEqual({ prospectIds: [P1, P2, P3], doublons: [], dedupliques: [P1, P2, P3], horsMission: [] });
     expect(t.etape(6).sortie).toEqual({ retenus: [P1, P2, P3], marques: [], exclus: [] });
     const reveils = t.reveils.length;
     expect(t.reveils).toEqual([2, 4, 5, 7].map(t.issueDuRang));
@@ -263,5 +263,116 @@ describe("WF-01 de bout en bout (étapes en code, outils et approbation natifs r
     // Le journal est conservé : ni coordonnée chiffrée ni empreinte de la personne opposée.
     expect(JSON.stringify(t.journal)).not.toContain("chv1.");
     expect(JSON.stringify(t.journal)).not.toContain(h(2));
+  });
+
+  /** Prospect existant, mais déposé par une autre tâche que celle du rang 2 de la mission (#58). */
+  const horsMission = (n: number, extra: Partial<ReturnType<typeof prospect>> = {}) => {
+    const p = prospect(n);
+    return { ...p, ...extra, sources: [{ ...p.sources[1]!, sourceId: SOURCE_AUTRE }] };
+  };
+  const collecter = async (opts: OptionsBanc, prospectIds: string[]) => {
+    const t = await monterChaine(opts);
+    await t.executeur.demarrerMission(SOC, t.missionId);
+    return { t, r: await t.deposer(2, { reponsesBrutesSignees: ["rep-1"], prospectIds, limites: LIMITES }) };
+  };
+
+  it("10 bis. une lecture de page ou un enrichissement du rang 2 ne rend pas collecté un prospect d'ailleurs", async () => {
+    const ajouts = [
+      { type: "lecture_url" as const, service: null, outil: null },
+      { faits: [{ code: "X", date: "2026-01-01" }] },
+      { taille: { classe: "petite" } },
+    ];
+    for (const ajout of ajouts) {
+      const h6 = horsMission(6);
+      const source = { ...h6.sources[0]!, sourceId: SOURCE_COLLECTE, ...ajout } as (typeof h6.sources)[number];
+      const ailleurs = { ...h6, sources: [...h6.sources, source] };
+      const { t } = await collecter({ prospects: [ailleurs] }, [P1, ailleurs.id]);
+      expect(t.etape(3).sortie).toEqual({ prospectIds: [P1], doublons: [], dedupliques: [P1], horsMission: [ailleurs.id] });
+    }
+  });
+
+  it("10. prospect sans source de la tâche du rang 2 : absent de prospectIds et listé dans horsMission", async () => {
+    const h6 = horsMission(6);
+    const { t, r } = await collecter({ prospects: [h6] }, [P1, h6.id, P2]);
+    expect(r.error).toBeUndefined();
+    expect(t.etape(3).sortie).toEqual({ prospectIds: [P1, P2], doublons: [], dedupliques: [P1, P2], horsMission: [h6.id] });
+  });
+
+  it("11. un prospect hors mission ne fait pas écarter comme doublon un prospect de la mission", async () => {
+    // Même numéro BCE, le hors mission est listé en premier : sans filtre d'origine avant la déduplication, il serait le gardé.
+    const h6 = horsMission(6, { numeroBce: "0123456789" });
+    const mien = { ...prospect(7), numeroBce: "0123456789" };
+    const { t } = await collecter({ prospects: [h6, mien] }, [h6.id, mien.id]);
+    expect(t.etape(3).sortie).toEqual({ prospectIds: [mien.id], doublons: [], dedupliques: [mien.id], horsMission: [h6.id] });
+  });
+
+  it("12. identifiant non conforme : jamais recopié dans horsMission ; au plus 50 identifiants conformes", async () => {
+    const inconnus = Array.from({ length: 60 }, (_, i) => `00000000-0000-4000-8000-${String(i + 1000).padStart(12, "0")}`);
+    const { t } = await collecter({}, [P1, "<script>alerte</script>", "pas-un-identifiant", ...inconnus]);
+    const sortie = t.etape(3).sortie as { prospectIds: string[]; horsMission: string[] };
+    expect(sortie.prospectIds).toEqual([P1]);
+    expect(sortie.horsMission).toEqual(inconnus.slice(0, 50));
+    expect(JSON.stringify(t.etape(3).sortie)).not.toContain("script");
+  });
+
+  it("13. identifiant ajouté au rang 5 : ni dans retenus ni dans le lot, listé dans exclus avec hors_mission", async () => {
+    const t = await monterChaine();
+    await t.jusquAutorisation({ collecte: [P1, P2, P3], qualifies: [], enrichis: [P1, P2, P3, P4], lot: [P1, P2, P3, P4] });
+    expect(t.etape(6).sortie).toEqual({ retenus: [P1, P2, P3], marques: [], exclus: [{ prospectId: P4, motifs: ["hors_mission"] }] });
+    t.approuver();
+    await t.executeur.surDoneNatif(SOC, t.issueDuRang(7));
+    expect(t.etat()).toBe("cloturee");
+    expect(t.crm.appels).toEqual([[P1, P2, P3]]);
+    expect(t.journal.find((j) => j.type === "moteur.export_ids_ecartes")?.donnees).toMatchObject({ ids: [P4], total: 1 });
+  });
+
+  it("14. sous-ensemble légitime au rang 5 : passe comme avant", async () => {
+    const t = await monterChaine();
+    await t.jusquAutorisation({ collecte: [P1, P2, P3], qualifies: [], enrichis: [P1, P2], lot: [P1, P2] });
+    expect(t.etape(6).sortie).toEqual({ retenus: [P1, P2], marques: [], exclus: [] });
+  });
+
+  it("15. sortie d'agent contenant dedupliques ou horsMission : refusée par verifierSortie", async () => {
+    for (const champ of ["dedupliques", "horsMission"]) {
+      const t = await monterChaine();
+      await t.executeur.demarrerMission(SOC, t.missionId);
+      const r = await t.deposer(2, { reponsesBrutesSignees: ["rep-1"], prospectIds: [P1], limites: LIMITES, [champ]: [P1] });
+      expect(r.error).toBeTruthy();
+      expect(r.data).toMatchObject({ code: "sortie_hors_contrat" });
+      expect(t.etape(3)?.etat).toBe("en_attente");
+    }
+  });
+
+  it("16. aucun prospect gardé au rang 3 : blocage, journal moteur.collecte_vide, aucun réveil au rang 4 ; la reprise ne double ni journal ni réveil", async () => {
+    for (const opts of [{ collecte: [] as string[] }, { prospects: [horsMission(6)] }]) {
+      const t = await monterChaine(opts);
+      await t.executeur.demarrerMission(SOC, t.missionId);
+      await t.deposer(2, { reponsesBrutesSignees: ["rep-1"], prospectIds: opts.prospects ? [opts.prospects[0]!.id] : [P1], limites: LIMITES });
+      expect(t.etat()).toBe("blocage");
+      expect(t.journal.filter((j) => j.type === "moteur.collecte_vide")).toHaveLength(1);
+      expect(t.journal.find((j) => j.type === "moteur.blocage")!.donnees).toMatchObject({ evenement: "arbitrage_demande" });
+      expect(t.etape(4).etat).toBe("en_attente");
+      expect(t.reveils).not.toContain(t.issueDuRang(4));
+      const reveils = [...t.reveils];
+      const journal = t.journal.length;
+      const apres = t.redemarrer();
+      await apres.reprendre(SOC);
+      await apres.reprendre(SOC);
+      expect(t.etat()).toBe("blocage");
+      expect(t.reveils).toEqual(reveils);
+      expect(t.journal).toHaveLength(journal);
+      expect(t.crm.ecritures).toEqual([]);
+    }
+  });
+
+  it("17. lecture des sources en panne au rang 3 : l'erreur remonte, ni lot entier ni collecte vide, la mission n'est pas bloquée", async () => {
+    const t = await monterChaine({ sourcesEnPanne: true });
+    await t.executeur.demarrerMission(SOC, t.missionId);
+    await expect(t.executeur.recevoirResultat(SOC, { missionId: t.missionId, rang: 2, tentative: 1, sortie: { reponsesBrutesSignees: ["rep-1"], prospectIds: [P1, P2], limites: LIMITES } })).rejects.toThrow("base indisponible");
+    expect(t.etat()).not.toBe("blocage");
+    expect(t.etape(3).etat).not.toBe("terminee");
+    expect(t.etape(3).sortie).toBeNull();
+    expect(t.journal.some((j) => j.type === "moteur.collecte_vide" || j.type === "moteur.blocage")).toBe(false);
+    expect(t.reveils).toEqual([t.issueDuRang(2)]);
   });
 });

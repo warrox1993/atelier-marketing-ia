@@ -18,9 +18,11 @@ import {
   FORMATS_SORTIE_VIDEO,
   GABARITS_IMAGE,
   GABARITS_VIDEO,
+  GENRES_GRAPHIQUE,
   LANGUES_DOCUMENT,
   LIMITE_APPEL_ACTION_IMAGE,
   LIMITE_BLOCS,
+  LIMITE_CATEGORIES,
   LIMITE_CHIFFRE_IMAGE,
   LIMITE_CHIFFRE_VISUEL,
   LIMITE_COLONNES,
@@ -31,14 +33,18 @@ import {
   LIMITE_LIGNES,
   LIMITE_MENTIONS_LEGALES_IMAGE,
   LIMITE_PLAGES,
+  LIMITE_SERIES,
+  LIMITE_SOURCE,
   LIMITE_POINT_IMAGE,
   LIMITE_POINT_VISUEL,
   LIMITE_SCENES,
   LIMITE_SOUS_TITRE_IMAGE,
   LIMITE_SOUS_TITRE_VISUEL,
   LIMITE_TEXTE,
+  LIMITE_TEXTE_REMPLACEMENT,
   LIMITE_TEXTE_VOIX,
   LIMITE_TITRE,
+  LIMITE_TITRE_GRAPHIQUE,
   LIMITE_TITRE_IMAGE,
   LIMITE_TITRE_VISUEL,
   DUREE_MAX_SCENE_MAX,
@@ -126,13 +132,14 @@ function plages(v: unknown, chemin: string, longueur: number): Array<{ debut: nu
 }
 
 function bloc(v: unknown, chemin: string): Record<string, unknown> {
-  const brut = objet(v, chemin, ["type", "niveau", "texte", "gras", "italique", "ordonnee", "elements", "entetes", "lignes", "livrable", "legende"], ["type"]);
-  const type = enumeration(brut.type, `${chemin}.type`, ["titre", "paragraphe", "liste", "tableau", "saut_de_page", "image"] as const);
+  const brut = objet(v, chemin, ["type", "niveau", "texte", "gras", "italique", "ordonnee", "elements", "entetes", "lignes", "livrable", "legende", "genre", "titre", "sous_titre", "categories", "series", "source", "texte_remplacement"], ["type"]);
+  const type = enumeration(brut.type, `${chemin}.type`, ["titre", "paragraphe", "liste", "tableau", "graphique", "saut_de_page", "image"] as const);
   const permises: Record<typeof type, readonly string[]> = {
     titre: ["type", "niveau", "texte"],
     paragraphe: ["type", "texte", "gras", "italique"],
     liste: ["type", "ordonnee", "elements"],
     tableau: ["type", "entetes", "lignes"],
+    graphique: ["type", "genre", "titre", "sous_titre", "categories", "series", "source", "texte_remplacement"],
     saut_de_page: ["type"],
     image: ["type", "livrable", "legende"],
   };
@@ -141,6 +148,7 @@ function bloc(v: unknown, chemin: string): Record<string, unknown> {
     paragraphe: ["type", "texte"],
     liste: ["type", "elements"],
     tableau: ["type", "lignes"],
+    graphique: ["type", "genre", "titre", "categories", "series", "source", "texte_remplacement"],
     saut_de_page: ["type"],
     image: ["type", "livrable"],
   };
@@ -169,13 +177,15 @@ function bloc(v: unknown, chemin: string): Record<string, unknown> {
       };
     }
     case "tableau": {
-      const ligne = (l: unknown, c: string) => tableau(l, c, LIMITE_COLONNES).map((x, i) => chaine(x, `${c}[${i}]`, LIMITE_TEXTE));
+      const ligne = (l: unknown, c: string) => tableau(l, c, LIMITE_COLONNES).map((x, i) => sansFormule(chaine(x, `${c}[${i}]`, LIMITE_TEXTE), `${c}[${i}]`));
       return {
         type,
         ...(o.entetes !== undefined ? { entetes: ligne(o.entetes, `${chemin}.entetes`) } : {}),
         lignes: tableau(o.lignes, `${chemin}.lignes`, LIMITE_LIGNES).map((l, i) => ligne(l, `${chemin}.lignes[${i}]`)),
       };
     }
+    case "graphique":
+      return graphique(o, chemin);
     case "saut_de_page":
       return { type };
     case "image": {
@@ -184,6 +194,67 @@ function bloc(v: unknown, chemin: string): Record<string, unknown> {
       return { type, livrable: livrable.toLowerCase(), ...(o.legende !== undefined ? { legende: chaine(o.legende, `${chemin}.legende`, LIMITE_TEXTE) } : {}) };
     }
   }
+}
+
+// Même motif, mêmes classes et même verdict que `_MOTIF_FORMULE` de fabrique/generateurs/documents.py :
+// `\w` Python = lettres, chiffres Unicode et « _ » ; `[^\W\d]` = ce même ensemble sans les Nd ; `\d` = \p{Nd}.
+// `lettres` = lettres admises dans une référence de cellule (A1).
+function corpsFormule(lettres: string): string {
+  const ref = String.raw`\$?[${lettres}]{1,3}\$?\p{Nd}+`;
+  const operateur = String.raw`[-+*/^&<>=]`;
+  return (
+    String.raw`(?:[\p{L}\p{Nl}\p{No}_][\p{L}\p{N}_.]*(?:\(|\s+\((?=[^)]*(?<![\p{L}\p{N}_$.])${ref}(?![\p{L}\p{N}_(])))` +
+    String.raw`|\(\s*\(*\s*(?:${ref}(?:\s*${operateur}|[,;)]|:${ref})|\p{Nd}[\p{Nd}.,]*\s*${operateur})` +
+    String.raw`|[\p{L}\p{N}_.' +\-*/()]*\|.*` +
+    String.raw`|[\p{L}\p{N}_.'$ ]+!\$?[A-Za-z]` +
+    String.raw`|${ref}(?:\s*${operateur}|:${ref}|$))`
+  );
+}
+
+// « + » et « - » : références en toutes lettres ; « @ » : majuscules seulement (un nom de compte reste du texte).
+const MOTIF_FORMULE = new RegExp(
+  String.raw`^(?:[+\-]\s*` + corpsFormule("A-Za-z") + String.raw`|@\s*` + corpsFormule("A-Z") + ")",
+  "u",
+);
+
+/** Refuse un texte qui ressemble à une formule (NFKC, sans caractères Cf ni blancs de tête) ; le rend inchangé sinon. */
+function sansFormule(texte: string, chemin: string): string {
+  const nu = texte.normalize("NFKC").replace(/\p{Cf}/gu, "").replace(/^\s+/u, "");
+  if (nu.startsWith("=") || MOTIF_FORMULE.test(nu)) {
+    refuser(chemin, "texte qui ressemble à une formule : calculer le résultat et déposer le nombre ; la fabrique n'écrit aucune formule");
+  }
+  return texte;
+}
+
+/** Même verdict que `_graphique` de fabrique/generateurs/documents.py (jeu de contrats demandes-document.json). */
+function graphique(o: Record<string, unknown>, chemin: string): Record<string, unknown> {
+  const genre = enumeration(o.genre, `${chemin}.genre`, GENRES_GRAPHIQUE);
+  const titre = chaine(o.titre, `${chemin}.titre`, LIMITE_TITRE_GRAPHIQUE, 1);
+  const categories = tableau(o.categories, `${chemin}.categories`, LIMITE_CATEGORIES).map((c, i) =>
+    sansFormule(chaine(c, `${chemin}.categories[${i}]`, LIMITE_TITRE_GRAPHIQUE, 1), `${chemin}.categories[${i}]`),
+  );
+  if (categories.length === 0) refuser(`${chemin}.categories`, "au moins une catégorie requise");
+  const series = tableau(o.series, `${chemin}.series`, LIMITE_SERIES).map((s, i) => {
+    const c = `${chemin}.series[${i}]`;
+    const serie = objet(s, c, ["nom", "valeurs"], ["nom", "valeurs"]);
+    const valeurs = tableau(serie.valeurs, `${c}.valeurs`, LIMITE_CATEGORIES);
+    if (valeurs.length !== categories.length) refuser(`${c}.valeurs`, `${categories.length} valeurs attendues (une par catégorie)`);
+    valeurs.forEach((v, j) => {
+      if (typeof v !== "number" || !Number.isFinite(v)) refuser(`${c}.valeurs[${j}]`, "nombre fini attendu");
+    });
+    return { nom: sansFormule(chaine(serie.nom, `${c}.nom`, LIMITE_TITRE_GRAPHIQUE, 1), `${c}.nom`), valeurs };
+  });
+  if (series.length === 0) refuser(`${chemin}.series`, "au moins une série requise");
+  return {
+    type: "graphique",
+    genre,
+    titre,
+    ...(o.sous_titre !== undefined ? { sous_titre: chaine(o.sous_titre, `${chemin}.sous_titre`, LIMITE_TITRE, 1) } : {}),
+    categories,
+    series,
+    source: chaine(o.source, `${chemin}.source`, LIMITE_SOURCE, 1),
+    texte_remplacement: chaine(o.texte_remplacement, `${chemin}.texte_remplacement`, LIMITE_TEXTE_REMPLACEMENT, 1),
+  };
 }
 
 function cellule(v: unknown, chemin: string): Record<string, unknown> {
@@ -198,8 +269,9 @@ function cellule(v: unknown, chemin: string): Record<string, unknown> {
     if (typeof valeur !== "boolean") refuser(`${chemin}.valeur`, "booléen attendu");
     return { type, valeur };
   }
-  // « texte » : une chaîne commençant par = + - @ reste du texte (le générateur la marquera, le schéma ne la refuse pas).
+  // « texte » : ce qui ressemble à une formule est refusé ; le reste (+32 470…, -5 %) reste du texte, marqué par le générateur.
   const t = chaine(valeur, `${chemin}.valeur`, LIMITE_TEXTE);
+  if (type === "texte") sansFormule(t, `${chemin}.valeur`);
   if (type === "date" && (!/^\d{4}-\d{2}-\d{2}(T[\d:.]+(Z|[+-]\d{2}:\d{2})?)?$/u.test(t) || Number.isNaN(Date.parse(t)))) {
     refuser(`${chemin}.valeur`, "date ISO 8601 attendue (AAAA-MM-JJ)");
   }

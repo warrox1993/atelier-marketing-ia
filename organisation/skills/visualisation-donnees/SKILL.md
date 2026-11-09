@@ -86,8 +86,9 @@ graphiques retirés parce qu'ils n'apportaient rien.
 ## Limites
 
 - La compétence ne crée aucune donnée : un chiffre absent des sources reste absent.
-- Sans outil de production graphique dans le rôle, elle livre la spécification complète du graphique (type, axes,
-  séries, couleurs, titres), marquée « graphique non produit ».
+- Le rôle qui a `fabriquer_document` dépose le graphique en bloc `graphique` (colonnes, barres ou courbe ; Word,
+  PowerPoint, PDF, pas Excel). Sans outil de production graphique dans le rôle, elle livre la spécification complète
+  du graphique (type, axes, séries, couleurs, titres), marquée « graphique non produit ».
 - Sur un petit nombre d'observations, une tendance n'est pas démontrée : le dire dans le sous-titre.
 
 ## Exemple

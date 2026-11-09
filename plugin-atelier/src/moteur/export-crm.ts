@@ -5,7 +5,7 @@
  * et dédoublonnage avant écriture (présence constatée dans le CRM).
  */
 import { createHash } from "node:crypto";
-import { CanalContact, CodeReferentiel, ServiceExportCrm, type Empreinte, type Prospect } from "../contrats/index.js";
+import { CanalContact, CodeReferentiel, IdNatif, ServiceExportCrm, type Empreinte, type Prospect } from "../contrats/index.js";
 import type { BaseAtelier } from "../serveur/base.js";
 import { dedoublonner, exclusionsProspect, figureDansOppositions, type ContexteProspection } from "../serveur/regles-prospection.js";
 import { cleEvenement } from "./executeur.js";
@@ -37,7 +37,8 @@ export interface DepsExport {
 }
 
 export interface ContexteEtapeCode { companyId: string; missionId: string; campagneId: string | null; entrees: Record<string, unknown> }
-export type SortieCode = { sortie: Record<string, unknown> } | { manquantes: string[] };
+/** `blocage` : l'étape ne peut rien produire et la mission part en blocage (le motif est journalisé par l'exécuteur). */
+export type SortieCode = { sortie: Record<string, unknown> } | { manquantes: string[] } | { blocage: string };
 
 export interface EtapesCode {
   /** Étapes en code d'avant la porte, par `action` du gabarit. */
@@ -115,8 +116,13 @@ export async function exporterLot(
 }
 
 const ids = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+/** Valeurs d'une sortie d'agent rendues dans une sortie du moteur : seuls des identifiants conformes, uniques, en nombre borné. */
+const BORNE_IDS_REJETES = 50;
+const conformes = (liste: string[]): string[] => [...new Set(liste)].filter((id) => IdNatif.safeParse(id).success).slice(0, BORNE_IDS_REJETES);
 
 export interface DepsEtapesWf01 {
+  /** Sources déposées par la tâche de collecte (rang 2) de la mission : l'origine des prospects que la mission peut traiter. */
+  sourcesCollecte(companyId: string, missionId: string): Promise<string[]>;
   lireProspects(companyId: string, ids: string[]): Promise<Prospect[]>;
   contexteExclusions(companyId: string, campagneId: string | null, prospects: Prospect[]): Promise<{ contexte: ContexteProspection; oppositions: Empreinte[] }>;
   deps: DepsExport;
@@ -139,15 +145,25 @@ export function creerEtapesWf01(d: DepsEtapesWf01): EtapesCode {
         return fichier !== null && CanalContact.safeParse(fichier.canal).success ? { sortie: { perimetreValide: true } } : { manquantes: ["exportCrm"] };
       },
       async dedupliquer(c) {
-        const { gardes, exclus } = dedoublonner(await d.lireProspects(c.companyId, ids(c.entrees.prospectIds)), new Date().toISOString());
+        const demandes = ids(c.entrees.prospectIds);
+        const sources = new Set(await d.sourcesCollecte(c.companyId, c.missionId));
+        // Origine d'abord : un prospect hors mission ne doit jamais faire écarter comme doublon un prospect de la mission.
+        // Seul un dépôt signé collecte : une lecture de page (téléphone) ou un enrichissement (faits BCE, taille BNB) peut viser un prospect de n'importe quelle mission.
+        const lus = (await d.lireProspects(c.companyId, demandes)).filter((p) => p.sources.some((s) => s.type === "depot_signe" && !s.faits && !s.taille && s.sourceId !== null && sources.has(s.sourceId)));
+        const { gardes, exclus } = dedoublonner(lus, new Date().toISOString());
         const prospectIds = gardes.map((p) => p.id);
+        if (prospectIds.length === 0) return { blocage: "collecte_vide" };
+        const deLaMission = new Set(lus.map((p) => p.id));
         // Le même identifiant listé deux fois n'est pas un doublon à écarter : il reste le prospect gardé.
-        return { sortie: { prospectIds, doublons: exclus.map((x) => x.prospect.id).filter((id) => !prospectIds.includes(id)) } };
+        return { sortie: { prospectIds, doublons: exclus.map((x) => x.prospect.id).filter((id) => !prospectIds.includes(id)), dedupliques: prospectIds, horsMission: conformes(demandes.filter((id) => !deLaMission.has(id))) } };
       },
       async controler_exclusions(c) {
         // Une sortie d'agent du rang 5 peut réintroduire un doublon écarté au rang 3.
         const doublons = new Set(ids(c.entrees.doublons));
-        const prospects = await d.lireProspects(c.companyId, ids(c.entrees.prospectIds).filter((id) => !doublons.has(id)));
+        // Sortie du rang 3 (jamais d'un agent) : un identifiant absent de `dedupliques` n'a pas été collecté par la mission ; absente, la liste est vide (refus par défaut).
+        const dedupliques = new Set(ids(c.entrees.dedupliques));
+        const demandes = ids(c.entrees.prospectIds).filter((id) => !doublons.has(id));
+        const prospects = await d.lireProspects(c.companyId, demandes.filter((id) => dedupliques.has(id)));
         const { contexte, oppositions } = await d.contexteExclusions(c.companyId, c.campagneId, prospects);
         const retenus: string[] = [];
         const marques: string[] = [];
@@ -161,6 +177,7 @@ export function creerEtapesWf01(d: DepsEtapesWf01): EtapesCode {
             if (figureDansOppositions(p, oppositions)) marques.push(p.id);
           }
         }
+        for (const prospectId of conformes(demandes.filter((id) => !dedupliques.has(id)))) exclus.push({ prospectId, motifs: ["hors_mission"] });
         return { sortie: { retenus, marques, exclus } };
       },
     },

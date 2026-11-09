@@ -23,6 +23,12 @@ const ACTEUR_MOTEUR: ActeurHote = { type: "systeme", id: "moteur-missions", agen
 const EXPORT_ACCEPTE = new Set(["simulee", "confirmee"]);
 const objet = (v: unknown): Record<string, unknown> => (typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
 
+/** Sources déposées par la tâche du rang 2 (collecte) de la mission ; sans cette tâche, aucune : rien n'est de la mission. Une panne de lecture remonte. */
+export const sourcesCollecteDe = (base: Pick<BaseMoteur, "lireEtapes" | "listerSources">) => async (companyId: string, missionId: string): Promise<string[]> => {
+  const issueId = (await base.lireEtapes(companyId, missionId)).find((e) => e.rang === 2 && e.tentative === 1)?.issueId;
+  return issueId ? (await base.listerSources(companyId, { issueId })).map((s) => s.id) : [];
+};
+
 /**
  * CRM de production : l'écriture passe par la route `tache.prospects.exporter`, un seul appel par lot. La route exige la décision humaine
  * « modifier_crm » sur l'appel exact : le moteur ne la crée, ne la simule et ne la contourne jamais. Une diffusion acceptée est une écriture ;
@@ -142,6 +148,7 @@ export function brancherMoteur(ctx: PluginContext, baseMoteur: BaseMoteur = cree
   // Étapes en code de WF-01 : lectures et route résolues à l'appel, comme le verdict et la porte (les services peuvent naître après le moteur).
   const etapesCode = creerEtapesWf01({
     lireProspects: (c, ids) => lectures().lireProspectsMoteur!(c, ids),
+    sourcesCollecte: sourcesCollecteDe(baseMoteur),
     contexteExclusions: (c, campagneId, prospects) => lectures().contexteExclusionsMoteur!(c, campagneId, prospects),
     deps: { crm: creerCrmProduction(baseMoteur, exporter, (c, campagneId) => lectures().modeMoteur!(c, campagneId)), base: baseMoteur },
   });

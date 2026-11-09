@@ -116,6 +116,28 @@ class TestAssurerFabrique(unittest.TestCase):
             reglages = bo.reglages_agent(self.reg, pathlib.Path("/c/cfg"), agent, pathlib.Path("/c/esp"))
             self.assertEqual("Read(//c/cfg/rendus/**)" in reglages["permissions"]["allow"], agent["slug"] in VOIR, agent["slug"])
 
+    def test_sans_politiques_ecrit_la_configuration_et_aucune_politique(self):
+        # #65 : une entreprise de service reçoit la liste des agents autorisés, sans les ~2 000 politiques block.
+        api = FauxApi({"autre": 1})
+        ecritures = bo.assurer_fabrique(api, CID, self.reg, self.agents, politiques=False)
+        self.assertEqual((ecritures, api.politiques), (1, []))
+        self.assertEqual(set(api.config["fabriqueAgentsDocuments"]), {f"id-{s}" for s in DOCUMENTS})
+        self.assertEqual(api.config["autre"], 1)
+        self.assertEqual(bo.assurer_fabrique(api, CID, self.reg, self.agents, politiques=False), 0)
+
+    def test_retrait_du_droit_vide_la_liste(self):
+        reg2 = copy.deepcopy(self.reg)
+        veille = next(a for a in reg2["agents"] if a["slug"] == "veille")
+        veille["outils"]["mutation"].append(bo.OUTILS_CLIENT_FABRIQUE["document"])
+        reg_service = {"agents": [veille]}
+        api = FauxApi({})
+        bo.assurer_fabrique(api, CID, reg_service, self.agents, politiques=False)
+        self.assertEqual(api.config["fabriqueAgentsDocuments"], ["id-veille"])
+        veille["outils"]["mutation"].remove(bo.OUTILS_CLIENT_FABRIQUE["document"])
+        self.assertEqual(bo.assurer_fabrique(api, CID, reg_service, self.agents, politiques=False), 1)
+        self.assertEqual(api.config["fabriqueAgentsDocuments"], [])
+        self.assertEqual(api.politiques, [])
+
     def test_idempotent(self):
         api = FauxApi({})
         bo.assurer_fabrique(api, CID, self.reg, self.agents)

@@ -578,7 +578,7 @@
     },
     "documents-bureautiques": {
       "version": "1.0.0",
-      "sha256": "8ae849e3a8a5b6dbc2add93b579f894f08e15d5a8cff37c9ac4fe0f4bbe2ab42",
+      "sha256": "ab28a39bcf3b0d31bd3d4da56e5536fa4e319c36a5366cae21ce288b6be29f98",
       "fichiers": [
         "SKILL.md"
       ]
@@ -1777,7 +1777,7 @@
     },
     "visualisation-donnees": {
       "version": "1.0.0",
-      "sha256": "95d7270395c2965ae80a73cd3889b5ba43a2ba557ef7b6dc1aadb8047cf6e492",
+      "sha256": "646aa18a92f13cd44afa41e47d661a6ba6c0f0148ca15fd96c807b66603b39bf",
       "fichiers": [
         "SKILL.md"
       ]

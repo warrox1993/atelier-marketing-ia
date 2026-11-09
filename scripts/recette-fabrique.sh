@@ -4,6 +4,9 @@
 # Elle dépose des travaux dans la file `entrant/` (comme le fait le plugin), attend leur résultat et vérifie :
 #   (a) un document docx, xlsx, pptx et pdf : état `termine`, fichier, résultat.json, provenance.json
 #       (sha256 recalculé), apercu.txt, etat.json (champ `tache`) ;
+#   (a bis) un docx et un pptx avec charte d'essai (chartes-autorisees/recette-fabrique/document.json, posée via
+#       sudo -n puis retirée) et un bloc graphique : parties word/charts et ppt/charts, aperçu « Charte appliquée : document » ;
+#       une cellule `=SOMME(A1)` refusée ;
 #   (b) une demande invalide : refusée dans `refuses/` (enveloppe), ou en `echec` propre (contenu) ;
 #   (c) une vidéo de 2 scènes : si la carte graphique est occupée (fabrique.gpu.gpu_disponible() faux, par
 #       exemple JB joue), vérifie l'état `en_attente_gpu` avec sa raison, retire le travail proprement et
@@ -19,6 +22,7 @@
 # Idempotente : tout ce qui est créé l'est sous l'entreprise `recette-fabrique` et retiré à la fin (et au
 # début, si une exécution précédente a été interrompue). Le nettoyage de dossiers appartenant au service
 # passe par `sudo -n`, limité aux chemins construits à partir des identifiants que cette recette a créés.
+# La charte d'essai est posée dans $RACINE/chartes-autorisees/recette-fabrique/ et retirée par le même trap.
 # L'entreprise `recette-fabrique` est ajoutée à `entreprises.json` (propriété de root, via `sudo -n`) au début
 # et retirée à la fin, y compris en cas d'échec ou d'interruption (trap) : elle ne reste pas autorisée en production.
 set -uo pipefail
@@ -73,6 +77,7 @@ retirer_refuses() {
 }
 
 LISTE_ENTREPRISES="$RACINE/entreprises.json"
+DOSSIER_CHARTE="$RACINE/chartes-autorisees/$ENTREPRISE"
 ENTREPRISE_AJOUTEE=0
 
 # modifier_entreprises <ajouter|retirer> : réécrit entreprises.json en entier (fichier neuf puis renommage, jamais
@@ -93,9 +98,16 @@ modifier_entreprises() {
     && sudo -n mv -f -- "$LISTE_ENTREPRISES.recette.tmp" "$LISTE_ENTREPRISES"
 }
 
+# Retire la charte d'essai (dossier propre à l'entreprise de la recette, propriété de root).
+retirer_charte() {
+  sudo -n rm -r -f --one-file-system -- "$DOSSIER_CHARTE" 2>/dev/null
+  return 0
+}
+
 nettoyer() {
   local id
   ((ENTREPRISE_AJOUTEE == 1)) && { modifier_entreprises retirer || echo "ATTENTION : $ENTREPRISE n'a pas pu être retirée de $LISTE_ENTREPRISES" >&2; }
+  retirer_charte
   for id in "${CREES[@]:-}"; do [[ -n "$id" ]] && retirer_travail "$id"; done
   retirer_refuses "${CREES[@]:-}"
   # Reste d'une exécution précédente interrompue : les identifiants sont tous sous l'entreprise de la recette.
@@ -121,6 +133,7 @@ prerequis() {
   modifier_entreprises ajouter || { echo "ajout de $ENTREPRISE à $LISTE_ENTREPRISES impossible" >&2; exit 2; }
   # Reste d'une exécution précédente interrompue.
   [[ -d "$RACINE/livrables/$ENTREPRISE" ]] && sudo -n rm -r --one-file-system -- "$RACINE/livrables/$ENTREPRISE" 2>/dev/null
+  retirer_charte
   return 0
 }
 
@@ -226,6 +239,62 @@ etape_documents() {
   done
 }
 
+# ---------- (a bis) charte, graphique, formule ----------
+
+GRAPHIQUE='{"type":"graphique","genre":"colonnes","titre":"Ventes par année","categories":["2025","2026"],"series":[{"nom":"Ventes","valeurs":[21,28.5]}],"source":"Données fictives de recette","texte_remplacement":"Colonnes : 28,5 en 2026 contre 21 en 2025."}'
+DEMANDE_DOCX_GRAPHIQUE='{"format":"docx","modele":"sobre","titre":"Recette docx graphique","langue":"fr-BE","blocs":[{"type":"titre","niveau":1,"texte":"Bonjour"},'"$GRAPHIQUE"']}'
+DEMANDE_PPTX_GRAPHIQUE='{"format":"pptx","modele":"sobre","titre":"Recette pptx graphique","langue":"fr-BE","blocs":[{"type":"titre","niveau":1,"texte":"Diapo"},'"$GRAPHIQUE"']}'
+DEMANDE_XLSX_FORMULE='{"format":"xlsx","modele":"sobre","titre":"Recette formule","langue":"fr-BE","feuilles":[{"nom":"F1","lignes":[[{"type":"texte","valeur":"=SOMME(A1)"}]]}]}'
+
+# poser_charte : charte d'essai sans nom de client, écrite par root (droits d'origine du registre : root:atelier-fabrique 0640).
+poser_charte() {
+  printf '%s\n' '{"id":"document","couleurs":{"fond":"#ffffff","texte":"#1b1b1b","accent":"#1f4e8c"},"police":"archivo"}' > "$TMP/document.json" || return 1
+  sudo -n install -d -o root -g atelier-fabrique -m 0750 -- "$DOSSIER_CHARTE" \
+    && sudo -n install -m 0640 -o root -g atelier-fabrique -- "$TMP/document.json" "$DOSSIER_CHARTE/document.json"
+}
+
+etape_charte_graphique() {
+  echo "Étape (a bis) : charte d'essai, graphique natif, formule refusée"
+  local format id etat motif message dossier
+  declare -A IDS TACHES
+  if ! poser_charte; then echec "charte d'essai" "pose impossible dans $DOSSIER_CHARTE"; return; fi
+  for format in docx pptx; do
+    TACHES[$format]="recette-graphique-$format-$$"
+    if [[ "$format" == docx ]]; then deposer document "$ENTREPRISE" "${TACHES[$format]}" "$DEMANDE_DOCX_GRAPHIQUE"
+    else deposer document "$ENTREPRISE" "${TACHES[$format]}" "$DEMANDE_PPTX_GRAPHIQUE"; fi
+    IDS[$format]="$DERNIER_ID"
+  done
+  for format in docx pptx; do
+    id="${IDS[$format]}"
+    [[ -n "$id" ]] || { echec "document $format avec charte et graphique" "dépôt impossible"; continue; }
+    etat="$(attendre_etat "$id" "$DELAI_DOCUMENT_S" termine)"
+    if [[ "$etat" != "termine" ]]; then
+      echec "document $format avec charte et graphique" "état « $etat » (message : $(jq -r '.message // "aucun"' "$(livrable "$id")/etat.json" 2>/dev/null))"
+      continue
+    fi
+    dossier="$(livrable "$id")"
+    if ! motif="$(verifier_livrable "$id" "${TACHES[$format]}" "$format")"; then echec "document $format avec charte et graphique" "$motif"; continue; fi
+    if ! unzip -Z1 "$dossier/$(jq -r '.fichiers[0].fichier' "$dossier/resultat.json")" | grep -Eq "^(word|ppt)/charts/chart[0-9]*\.xml$"; then
+      echec "document $format avec charte et graphique" "aucune partie charts dans l'archive"; continue
+    fi
+    if [[ "$(head -n 1 "$dossier/apercu.txt")" != "Charte appliquée : document" ]]; then
+      echec "document $format avec charte et graphique" "aperçu sans « Charte appliquée : document »"; continue
+    fi
+    reussi "document $format avec charte et graphique (partie charts, aperçu de la charte)"
+  done
+  retirer_charte
+  # Une cellule qui ressemble à une formule est refusée : échec propre, aucun fichier livré.
+  deposer document "$ENTREPRISE" "recette-formule-$$" "$DEMANDE_XLSX_FORMULE" || { echec "formule refusée" "dépôt impossible"; return; }
+  id="$DERNIER_ID"
+  etat="$(attendre_etat "$id" 120 echec)"
+  message="$(jq -r '.message // empty' "$(livrable "$id")/etat.json" 2>/dev/null)"
+  if [[ "$etat" == "echec" && "$message" == "demande invalide"* && "$(find "$(livrable "$id")" -maxdepth 1 -type f ! -name etat.json | wc -l)" -eq 0 ]]; then
+    reussi "cellule =SOMME(A1) refusée (« $message »), aucun fichier livré"
+  else
+    echec "formule refusée" "état « $etat », message « $message »"
+  fi
+}
+
 # ---------- (b) demande invalide ----------
 
 etape_invalide() {
@@ -328,6 +397,7 @@ etape_video() {
 
 prerequis
 etape_documents
+etape_charte_graphique
 etape_invalide
 ((AVEC_VIDEO == 1)) && etape_video
 

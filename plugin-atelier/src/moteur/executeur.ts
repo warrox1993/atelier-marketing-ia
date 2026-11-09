@@ -305,6 +305,11 @@ export function creerExecuteur(deps: DepsExecuteur) {
     await base.changerRangMission(m.companyId, m.id, m.rangCourant, g.rang);
     if (!rejeu && !(await appliquer(m.companyId, m.id, g.rang, 1, "demarrage")).applique) return;
     const r = await calcul({ companyId: m.companyId, missionId: m.id, campagneId: m.campagneId, entrees: entreesDe(etapes, g.rang) });
+    if ("blocage" in r) {
+      // Rien à faire passer à l'étape suivante : blocage au rang de l'étape (comme la reprise le relira), le coordinateur est signalé, aucun agent du rang suivant n'est réveillé.
+      await journalUneFois(m, g.rang, r.blocage, { rang: g.rang }, issueDe(etapes, g.rang));
+      return bloquer({ ...m, rangCourant: g.rang }, etapes, "arbitrage_demande");
+    }
     if ("manquantes" in r) {
       if ((await appliquer(m.companyId, m.id, g.rang, 1, "entree_manquante")).applique) {
         await mettreEnAttenteInformation(m.companyId, etape);

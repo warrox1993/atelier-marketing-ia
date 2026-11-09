@@ -15,6 +15,7 @@ export const FORMATS_DOCUMENT = ["docx", "xlsx", "pptx", "pdf"] as const;
 export const MODELES_DOCUMENT = ["sobre"] as const;
 export const LANGUES_DOCUMENT = ["fr-BE", "nl-BE", "en"] as const;
 export const TYPES_CELLULE = ["texte", "nombre", "date", "booleen"] as const;
+export const GENRES_GRAPHIQUE = ["colonnes", "barres", "courbe"] as const;
 
 export const LIMITE_TITRE = 200;
 export const LIMITE_BLOCS = 2000;
@@ -24,6 +25,11 @@ export const LIMITE_FEUILLES = 20;
 export const LIMITE_TEXTE = 20000;
 export const LIMITE_ELEMENTS_LISTE = 500;
 export const LIMITE_PLAGES = 500;
+export const LIMITE_CATEGORIES = 50;
+export const LIMITE_SERIES = 6;
+export const LIMITE_TITRE_GRAPHIQUE = 120;
+export const LIMITE_SOURCE = 300;
+export const LIMITE_TEXTE_REMPLACEMENT = 1000;
 
 export const FORMATS_SORTIE_VIDEO = ["1080x1920", "1920x1080", "1080x1080"] as const;
 export const GABARITS_VIDEO = ["titre_plein_ecran", "chiffre_cle", "liste_3_points"] as const;
@@ -102,6 +108,39 @@ const blocSchema = {
         },
       },
     },
+    {
+      type: "object",
+      additionalProperties: false,
+      required: ["type", "genre", "titre", "categories", "series", "source", "texte_remplacement"],
+      properties: {
+        type: { const: "graphique" },
+        genre: { enum: [...GENRES_GRAPHIQUE] },
+        titre: { type: "string", minLength: 1, maxLength: LIMITE_TITRE_GRAPHIQUE },
+        sous_titre: { type: "string", minLength: 1, maxLength: LIMITE_TITRE },
+        categories: {
+          type: "array",
+          minItems: 1,
+          maxItems: LIMITE_CATEGORIES,
+          items: { type: "string", minLength: 1, maxLength: LIMITE_TITRE_GRAPHIQUE },
+        },
+        series: {
+          type: "array",
+          minItems: 1,
+          maxItems: LIMITE_SERIES,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["nom", "valeurs"],
+            properties: {
+              nom: { type: "string", minLength: 1, maxLength: LIMITE_TITRE_GRAPHIQUE },
+              valeurs: { type: "array", maxItems: LIMITE_CATEGORIES, items: { type: "number" } },
+            },
+          },
+        },
+        source: { type: "string", minLength: 1, maxLength: LIMITE_SOURCE },
+        texte_remplacement: { type: "string", minLength: 1, maxLength: LIMITE_TEXTE_REMPLACEMENT },
+      },
+    },
     { type: "object", additionalProperties: false, required: ["type"], properties: { type: { const: "saut_de_page" } } },
     {
       type: "object",
@@ -140,7 +179,7 @@ export const DECLARATION_FABRIQUER_DOCUMENT: PluginToolDeclaration = {
   name: NOM_OUTIL_FABRIQUER_DOCUMENT,
   displayName: "Fabriquer un document",
   description:
-    "Dépose une demande de fabrication de document (docx, xlsx, pptx ou pdf) dans la file de la fabrique. Réponse immédiate : un identifiant de travail (UUID) et l'état « en_file ». Suivre l'avancement avec etat_fabrication. Contenu structuré seulement : ni chemin, ni URL, ni lien, ni HTML ; aucune formule dans les feuilles.",
+    "Dépose une demande de fabrication de document (docx, xlsx, pptx ou pdf) dans la file de la fabrique. Réponse immédiate : un identifiant de travail (UUID) et l'état « en_file ». Suivre l'avancement avec etat_fabrication. Contenu structuré seulement : ni chemin, ni URL, ni lien, ni HTML ; formule refusée (calculer le résultat et déposer le nombre) ; graphique permis en bloc graphique (docx, pptx, pdf) ; la charte de l'entreprise est posée par la fabrique, jamais envoyée.",
   parametersSchema: {
     type: "object",
     additionalProperties: false,

@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import type { Prospect } from "../src/contrats/index.js";
 import { creerEtapesWf01, exporterLot, type CrmMoteur } from "../src/moteur/export-crm.js";
 import { rangPorte } from "../src/moteur/gabarits.js";
-import { ENTREES, EXPORT_CRM, GABARIT, LIMITES, approbationNative, P1, P2, P3, P4, SOC, T, h, jusquAutorisation, monter, prospect } from "./moteur-wf01-doubles.js";
+import { ENTREES, EXPORT_CRM, GABARIT, LIMITES, approbationNative, P1, P2, P3, P4, SOC, SOURCE_COLLECTE, T, h, jusquAutorisation, monter, prospect } from "./moteur-wf01-doubles.js";
 
 describe("rang de la porte", () => {
   it("est la dernière étape qui n'est pas en code (7 pour WF-01) ; une étape unique garde le rang 1", () => {
@@ -25,7 +25,7 @@ describe("étapes en code avant la porte", () => {
     expect(t.creations.map((c) => c.blockedByIssueIds)).toEqual([[], [t.issueDuRang(2)], [t.issueDuRang(4)], [t.issueDuRang(5)]]);
     expect(t.reveils).toEqual([2, 4, 5, 7].map(t.issueDuRang));
     expect(t.etat()).toBe("attente_autorisation");
-    expect(t.etapes.find((e) => e.rang === 3)!.sortie).toEqual({ prospectIds: [P1, P2, P3], doublons: [] });
+    expect(t.etapes.find((e) => e.rang === 3)!.sortie).toEqual({ prospectIds: [P1, P2, P3], doublons: [], dedupliques: [P1, P2, P3], horsMission: [] });
     expect(t.etapes.find((e) => e.rang === 6)!.sortie).toEqual({ retenus: [P1, P2, P3], marques: [], exclus: [] });
   });
 
@@ -262,18 +262,18 @@ describe("étapes en code : périmètre, doublons, exclusions", () => {
   });
 
   const etapes = (prospects: Prospect[]) =>
-    creerEtapesWf01({ lireProspects: async (_c, ids) => ids.flatMap((id) => prospects.filter((p) => p.id === id)), contexteExclusions: async () => ({ contexte: { maintenant: T, modeCampagne: "reel", canaux: [], zone: null, clientsActuels: [] }, oppositions: [] }), deps: {} as never });
+    creerEtapesWf01({ lireProspects: async (_c, ids) => ids.flatMap((id) => prospects.filter((p) => p.id === id)), sourcesCollecte: async () => [SOURCE_COLLECTE], contexteExclusions: async () => ({ contexte: { maintenant: T, modeCampagne: "reel", canaux: [], zone: null, clientsActuels: [] }, oppositions: [] }), deps: {} as never });
   const ctx = (entrees: Record<string, unknown>) => ({ companyId: SOC, missionId: "m", campagneId: null, entrees });
 
   it("deux fiches au même numéro BCE : la seconde est dédoublonnée", async () => {
     const a = { ...prospect(1), numeroBce: "0123456789" };
     const b = { ...prospect(2), numeroBce: "0123.456.789" };
     const r = await etapes([a, b, prospect(3)]).avantPorte.dedupliquer!(ctx({ prospectIds: [a.id, b.id, prospect(3).id] }));
-    expect(r).toEqual({ sortie: { prospectIds: [a.id, prospect(3).id], doublons: [b.id] } });
+    expect(r).toEqual({ sortie: { prospectIds: [a.id, prospect(3).id], doublons: [b.id], dedupliques: [a.id, prospect(3).id], horsMission: [] } });
   });
 
   it("un doublon réintroduit par la sortie de l'agent du rang 5 est écarté", async () => {
-    const r = await etapes([prospect(1), prospect(2)]).avantPorte.controler_exclusions!(ctx({ prospectIds: [P1, P2], doublons: [P2] }));
+    const r = await etapes([prospect(1), prospect(2)]).avantPorte.controler_exclusions!(ctx({ prospectIds: [P1, P2], doublons: [P2], dedupliques: [P1] }));
     expect(r).toEqual({ sortie: { retenus: [P1], marques: [], exclus: [] } });
   });
 
@@ -281,8 +281,42 @@ describe("étapes en code : périmètre, doublons, exclusions", () => {
     const motif = { motif: "entreprise_inactive" as const, detail: "inactive", constateLe: T };
     const exclu = { ...prospect(1), statut: "exclu" as const, motifsExclusion: [motif] };
     const sansMotif = { ...prospect(2), statut: "exclu" as const, motifsExclusion: [] };
-    const r = await etapes([exclu, sansMotif, prospect(3)]).avantPorte.controler_exclusions!(ctx({ prospectIds: [P1, P2, P3] }));
+    const r = await etapes([exclu, sansMotif, prospect(3)]).avantPorte.controler_exclusions!(ctx({ prospectIds: [P1, P2, P3], dedupliques: [P1, P2, P3] }));
     expect(r).toEqual({ sortie: { retenus: [P3], marques: [], exclus: [{ prospectId: P1, motifs: ["entreprise_inactive"] }, { prospectId: P2, motifs: ["statut_exclu"] }] } });
+  });
+});
+
+describe("étapes en code : origine des prospects (#58)", () => {
+  const etapes = (prospects: Prospect[], sources: string[]) =>
+    creerEtapesWf01({ lireProspects: async (_c, ids) => ids.flatMap((id) => prospects.filter((p) => p.id === id)), sourcesCollecte: async () => sources, contexteExclusions: async () => ({ contexte: { maintenant: T, modeCampagne: "reel", canaux: [], zone: null, clientsActuels: [] }, oppositions: [] }), deps: {} as never });
+  const ctx = (entrees: Record<string, unknown>) => ({ companyId: SOC, missionId: "m", campagneId: null, entrees });
+  const INCONNUS = Array.from({ length: 60 }, (_, i) => `00000000-0000-4000-8000-${String(i + 1000).padStart(12, "0")}`);
+
+  it("rang 6 sans dedupliques : refus par défaut, tout identifiant va dans exclus avec hors_mission", async () => {
+    const r = await etapes([prospect(1), prospect(2)], [SOURCE_COLLECTE]).avantPorte.controler_exclusions!(ctx({ prospectIds: [P1, P2] }));
+    expect(r).toEqual({ sortie: { retenus: [], marques: [], exclus: [{ prospectId: P1, motifs: ["hors_mission"] }, { prospectId: P2, motifs: ["hors_mission"] }] } });
+  });
+
+  it("rang 6 : un doublon réintroduit reste retiré en silence (pas hors_mission) ; un identifiant ajouté est exclu", async () => {
+    const r = await etapes([prospect(1), prospect(2), prospect(3)], [SOURCE_COLLECTE]).avantPorte.controler_exclusions!(ctx({ prospectIds: [P1, P2, P3], doublons: [P2], dedupliques: [P1] }));
+    expect(r).toEqual({ sortie: { retenus: [P1], marques: [], exclus: [{ prospectId: P3, motifs: ["hors_mission"] }] } });
+  });
+
+  it("rang 6 : seuls des identifiants conformes, au plus 50, entrent dans exclus", async () => {
+    const r = await etapes([prospect(1)], [SOURCE_COLLECTE]).avantPorte.controler_exclusions!(ctx({ prospectIds: [P1, "<b>x</b>", ...INCONNUS], dedupliques: [P1] }));
+    const sortie = (r as { sortie: { retenus: string[]; exclus: Array<{ prospectId: string }> } }).sortie;
+    expect(sortie.retenus).toEqual([P1]);
+    expect(sortie.exclus.map((x) => x.prospectId)).toEqual(INCONNUS.slice(0, 50));
+  });
+
+  it("rang 3 : liste de sources vide ou aucun prospect de la mission : blocage collecte_vide, sans sortie", async () => {
+    expect(await etapes([prospect(1)], []).avantPorte.dedupliquer!(ctx({ prospectIds: [P1] }))).toEqual({ blocage: "collecte_vide" });
+    expect(await etapes([prospect(1)], [SOURCE_COLLECTE]).avantPorte.dedupliquer!(ctx({ prospectIds: [] }))).toEqual({ blocage: "collecte_vide" });
+  });
+
+  it("rang 3 : la lecture des sources qui échoue lève l'erreur, sans sortie ni collecte vide", async () => {
+    const e = creerEtapesWf01({ lireProspects: async () => [prospect(1)], sourcesCollecte: async () => { throw new Error("base indisponible"); }, contexteExclusions: async () => { throw new Error("hors sujet"); }, deps: {} as never });
+    await expect(e.avantPorte.dedupliquer!(ctx({ prospectIds: [P1] }))).rejects.toThrow("base indisponible");
   });
 });
 

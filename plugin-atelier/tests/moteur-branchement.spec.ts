@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PluginContext } from "@paperclipai/plugin-sdk";
 import { ESPACE_BASE } from "../src/contrats/index.js";
-import { brancherMoteur, creerCrmProduction, depsPorte } from "../src/moteur/branchement.js";
+import { brancherMoteur, creerCrmProduction, depsPorte, sourcesCollecteDe } from "../src/moteur/branchement.js";
 import { PorteRefusee } from "../src/moteur/gabarits.js";
 import { STATUT_PROJETE } from "../src/moteur/transitions.js";
 import { VEILLEUR } from "../src/serveur/veilleur.js";
@@ -262,6 +262,24 @@ describe("depsPorte", () => {
     const { pc } = fauxCtx();
     const deps = depsPorte(pc, { marques: vi.fn(async () => marques) } as never);
     expect(await deps.conformiteImposee(SOC)).toBe(attendu);
+  });
+});
+
+describe("sourcesCollecteDe (#58)", () => {
+  const etapes = [{ rang: 2, tentative: 1, issueId: ISSUE }, { rang: 2, tentative: 2, issueId: "autre" }, { rang: 4, tentative: 1, issueId: "quatre" }];
+  it("lit les sources de la tâche du rang 2, tentative 1, dans l'entreprise de la mission", async () => {
+    const listerSources = vi.fn(async () => [{ id: "s1" }, { id: "s2" }]);
+    expect(await sourcesCollecteDe({ lireEtapes: async () => etapes, listerSources } as never)(SOC, MISSION)).toEqual(["s1", "s2"]);
+    expect(listerSources).toHaveBeenCalledWith(SOC, { issueId: ISSUE });
+  });
+  it("sans tâche au rang 2 : aucune source, aucune lecture", async () => {
+    const listerSources = vi.fn(async () => [{ id: "s1" }]);
+    expect(await sourcesCollecteDe({ lireEtapes: async () => [etapes[2]], listerSources } as never)(SOC, MISSION)).toEqual([]);
+    expect(listerSources).not.toHaveBeenCalled();
+  });
+  it("panne de lecture : l'erreur remonte, jamais une liste vide", async () => {
+    const listerSources = vi.fn(async () => { throw new Error("base indisponible"); });
+    await expect(sourcesCollecteDe({ lireEtapes: async () => etapes, listerSources } as never)(SOC, MISSION)).rejects.toThrow("base indisponible");
   });
 });
 

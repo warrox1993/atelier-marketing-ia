@@ -1,7 +1,7 @@
 {
   "schema": "atelier/registre-services/v1",
-  "version": "1.3.0",
-  "dateVersion": "2026-11-07",
+  "version": "1.4.0",
+  "dateVersion": "2026-11-09",
   "description": "Registre des services de l'Atelier. Chaque service est une entreprise Paperclip distincte dans l'instance du client ; la Direction voit tout. Les services échangent uniquement par des demandes tracées entre coordinateurs (bureau de liaison du plugin, plugin-atelier/src/serveur/liaisons/ : une demande adressée à un service va à son coordinateur ; pour la Direction, à son coordinateur général (champ « coordinateurGeneral », rôle ceo), seul agent de la Direction qui ouvre une liaison vers un autre service), selon la matrice « flux » (flux métier) complétée à la déclaration par le réseau des coordinateurs, généré par scripts/atelier_services.py (toute paire de services du même client, jamais listée ici) : pas de flux déclaré, pas d'échange. Le service marketing renvoie à organisation/registre/agents.json (champ agentsRef) sans dupliquer ses agents. Un service « sensible » impose l'approbation humaine sur tous ses flux.",
   "services": [
     {
@@ -64,6 +64,9 @@
       ],
       "outilsInterdits": ["mcp__Paperclip_connections__connection_request"],
       "reglages": {
+        "synthese": {"fabriqueDocuments": true},
+        "tableau-de-bord": {"fabriqueDocuments": true},
+        "secretariat-instances": {"fabriqueDocuments": true},
         "coordinateur-general": {"envPortable": {"CLAUDE_CODE_PROMPT_CACHE_TTL": "1h"}},
         "contradicteur": {"outilsInterdits": ["mcp__paperclip-assigned"], "modele": {"id": "claude-opus-5-5", "effort": "high"}}
       }
@@ -165,7 +168,11 @@
         "CRM",
         "Agenda",
         "Catalogue produits et compagnies"
-      ]
+      ],
+      "reglages": {
+        "propositions": {"fabriqueDocuments": true},
+        "appels-offres": {"fabriqueDocuments": true}
+      }
     },
     {
       "slug": "recouvrement",
@@ -340,7 +347,11 @@
         "Banque (extraits)",
         "Réseau Peppol",
         "Balance âgée"
-      ]
+      ],
+      "reglages": {
+        "controle-gestion": {"fabriqueDocuments": true},
+        "cloture-reporting": {"fabriqueDocuments": true}
+      }
     },
     {
       "slug": "ressources-humaines",
@@ -377,7 +388,10 @@
         "Secrétariat social",
         "Offres d'emploi"
       ],
-      "sensible": true
+      "sensible": true,
+      "reglages": {
+        "indicateurs-rh": {"fabriqueDocuments": true}
+      }
     },
     {
       "slug": "informatique",
@@ -472,7 +486,10 @@
         "Procédures",
         "Réclamations",
         "Indicateurs de qualité"
-      ]
+      ],
+      "reglages": {
+        "revue-direction": {"fabriqueDocuments": true}
+      }
     },
     {
       "slug": "logistique",
@@ -595,7 +612,10 @@
         "Communiqués",
         "Annonces internes",
         "Contacts presse"
-      ]
+      ],
+      "reglages": {
+        "editorial-institutionnel": {"fabriqueDocuments": true}
+      }
     },
     {
       "slug": "service-client",
@@ -687,7 +707,10 @@
         "Portefeuille de projets",
         "Plannings et jalons",
         "Registre des risques"
-      ]
+      ],
+      "reglages": {
+        "reporting-comites": {"fabriqueDocuments": true}
+      }
     },
     {
       "slug": "hse",
@@ -813,7 +836,11 @@
         "Entrepôt de données",
         "Tableaux de bord",
         "Catalogue de données"
-      ]
+      ],
+      "reglages": {
+        "analyste-donnees": {"fabriqueDocuments": true},
+        "tableaux-de-bord": {"fabriqueDocuments": true}
+      }
     },
     {
       "slug": "evenementiel",

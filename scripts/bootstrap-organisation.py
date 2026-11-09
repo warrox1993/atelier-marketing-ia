@@ -3457,7 +3457,7 @@ def agents_fabrique(reg_agents: dict) -> dict[str, set[str]]:
     return resultat
 
 
-def assurer_fabrique(api: Api, cid: str, reg_agents: dict, agents: dict[str, dict]) -> int:
+def assurer_fabrique(api: Api, cid: str, reg_agents: dict, agents: dict[str, dict], politiques: bool = True) -> int:
     """Ouvre la fabrique aux seuls rôles retenus ; retourne le nombre d'écritures faites.
 
     1. Configuration du plugin : `fabriqueAgentsDocuments`, `fabriqueAgentsVideo` et `fabriqueAgentsImage` = identifiants (UUID) des agents
@@ -3469,6 +3469,8 @@ def assurer_fabrique(api: Api, cid: str, reg_agents: dict, agents: dict[str, dic
        absente, jamais modifiée ni réactivée ensuite ; supprimée si l'agent est retenu plus tard. Le registre ajoute en plus l'outil dans --disallowedTools.
     3. DOC-A1 : même politique pour tout AUTRE outil enregistré par le plugin (outils_plugin), sauf pour un agent qui
        l'a en autorisation explicite dans le registre : un futur outil sans contrôle propre n'est jamais pré-approuvé.
+    Avec `politiques=False` (entreprises de service, #65) : seule la configuration est écrite (1 et 3 sautées) ; l'outil
+    reste dans --disallowedTools et le plugin refuse tout agent absent de la liste.
     """
     retenus = agents_fabrique(reg_agents)
     genres = {outil.split(":", 1)[1]: genre for genre, outil in OUTILS_FABRIQUE_PASSERELLE.items()}
@@ -3489,6 +3491,8 @@ def assurer_fabrique(api: Api, cid: str, reg_agents: dict, agents: dict[str, dic
     if voulue != actuelle:
         ecrire_config_plugin(api, cid, voulue)
         ecritures += 1
+    if not politiques:
+        return ecritures
     existantes = {p.get("name"): p for p in politiques_outils(api, cid)}
     for slug, agent in sorted(agents.items()):
         if slug not in par_slug:
@@ -4584,6 +4588,11 @@ def agents_service(reg_agents: dict, svc: dict) -> tuple[list[dict], dict[str, s
                                  "avant toute validation."})
         else:
             reglage = svc.get("reglages", {}).get(slug, {})
+            if reglage.get("fabriqueDocuments") is True:
+                # #65 : Word, PowerPoint, Excel seulement (fabriquer_document et son état) ; vidéo, image et voir_rendu restent interdits.
+                ouverts = (OUTILS_CLIENT_FABRIQUE["document"], OUTILS_CLIENT_FABRIQUE["etat"])
+                a["outils"]["interdits"] = [o for o in a["outils"]["interdits"] if o not in ouverts]
+                a["outils"]["mutation"] += [o for o in ouverts if o not in a["outils"]["mutation"]]
             retires = (["WebSearch"] if not coordinateur else []) + svc.get("outilsInterdits", []) + reglage.get("outilsInterdits", [])
             for outil in retires:
                 a["outils"]["recherche"] = [o for o in a["outils"]["recherche"] if o != outil]
@@ -4800,6 +4809,18 @@ def appliquer_service(api: Api, reg_agents: dict, reg_orga: dict, fichiers: dict
     if ecr_permissions:
         print(f"Permissions : canCreateSkills=false posé sur {ecr_permissions} agent(s) (M3).")
     assurer_gouvernance(api, company_id, reg_agents, agents)
+    try:
+        ecr_fabrique = assurer_fabrique(api, company_id, reg_agents, agents, politiques=False)
+        if ecr_fabrique:
+            print(f"Fabrique : {ecr_fabrique} écriture(s) (agents autorisés du plugin, aucune politique).")
+    except ErreurAtelier as e:
+        # Seuls un plugin absent (404) ou ancien (schéma refusé, HTTP 400) avertissent ; le reste (500, 401, API injoignable) remonte.
+        if "introuvable" not in str(e) and "HTTP 400" not in str(e):
+            raise
+        print(f"  avertissement : fabrique non configurée ({e}) ; relancer après mise à jour du plugin.")
+    if agents_fabrique(reg_agents)["document"]:
+        print(f"  Fabrique : à exécuter une fois pour cette entreprise (sinon dépôts refusés, rôles sans livrable) : "
+              f"sudo bash scripts/installer-fabrique.sh --autoriser-entreprise {company_id}")
     projets, ecr_proj = assurer_liens_projets(api, company_id, reg_orga, {})
     ecr_routines = assurer_routines(api, company_id, reg_orga, agents, projets, fichiers)
     etat = {"schema": "atelier/etat-bootstrap-service/v1", "api": api.base, "companyId": company_id,

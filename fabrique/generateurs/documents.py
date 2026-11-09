@@ -13,7 +13,9 @@ Seconde commande, `apercu <document> <dossier_sortie>` : écrit `apercu.txt` (te
 
 Codes de sortie : 0 succès ; 2 demande refusée (message sur la sortie d'erreur) ; 1 erreur
 interne. Aucun fichier fourni par l'agent n'est ouvert : tout vient du JSON et du gabarit
-« sobre » construit ici. Aucune formule n'est jamais écrite. Voir
+« sobre » construit ici, plus, si le service les a écrits à côté de la demande, `charte.json` et
+`logo.png` (charte du registre `document.json`, posée d'office : jamais un fichier de l'agent). Les blocs
+`graphique` sont dessinés ici (docx, pptx, pdf). Aucune formule n'est jamais écrite. Voir
 docs/conception-execution-etroite.md §5 et §6.1. La demande est revalidée ici : la
 fabrique ne fait pas confiance au plugin.
 """
@@ -21,10 +23,12 @@ fabrique ne fait pas confiance au plugin.
 from __future__ import annotations
 
 import datetime
+import io
 import json
 import math
 import re
 import sys
+import unicodedata
 from pathlib import Path
 
 # ---------- limites (miroir de plugin-atelier/src/contrats/fabrique-outils-schemas.ts) ----------
@@ -42,12 +46,20 @@ LIMITE_TEXTE = 20000
 LIMITE_ELEMENTS_LISTE = 500
 LIMITE_PLAGES = 500
 LIMITE_NOM_FEUILLE = 31
+GENRES_GRAPHIQUE = ("colonnes", "barres", "courbe")
+LIMITE_CATEGORIES = 50
+LIMITE_SERIES = 6
+LIMITE_TITRE_GRAPHIQUE = 120
+LIMITE_SOURCE = 300
+LIMITE_TEXTE_REMPLACEMENT = 1000
 TAILLE_MAX_DEMANDE = 64 * 1024 * 1024
 
 AUTEUR = "Atelier Marketing IA"
 COMMENTAIRE = "Contenu généré avec l'IA"
 MOTS_CLES = "trainedAlgorithmicMedia"
 POLICE = "Arial"
+# Familles des chartes du registre (miroir de registre_charte.FAMILLES_DOCUMENT, vérifié par un test).
+FAMILLES_CHARTE = ("DejaVu Sans", "Archivo", "Source Serif 4")
 
 # Caractères interdits en XML 1.0 (contrôles, demi-paires isolées, U+FFFE/U+FFFF).
 _CARACTERES_INTERDITS = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff￾￿]")
@@ -92,6 +104,32 @@ def _texte(valeur, chemin: str, minimum: int = 0, maximum: int = LIMITE_TEXTE) -
         _refuser(chemin, f"longueur {len(valeur)} hors de [{minimum}, {maximum}]")
     if _CARACTERES_INTERDITS.search(valeur):
         _refuser(chemin, "caractère de contrôle interdit")
+    return valeur
+
+
+def _corps_formule(lettres: str) -> str:
+    """Suite du motif après le signe ; `lettres` = lettres admises dans une référence de cellule (A1)."""
+    ref = rf"\$?[{lettres}]{{1,3}}\$?\d+"
+    operateur = r"[-+*/^&<>=]"
+    return (rf"(?:[^\W\d][\w.]*(?:\(|\s+\((?=[^)]*(?<![\w$.]){ref}(?![\w(])))"  # SUM(…) ; SUM (…A1…)
+            rf"|\(\s*\(*\s*(?:{ref}(?:\s*{operateur}|[,;)]|:{ref})|\d[\d.,]*\s*{operateur})"  # (A1+…) ; (1+2)
+            r"|[\w.' +\-*/()]*\|.*"  # cmd|' /C calc'!A0
+            r"|[\w.'$ ]+!\$?[A-Za-z]"  # Feuil1!A1
+            rf"|{ref}(?:\s*{operateur}|:{ref}|\Z))")  # A1+B2 ; A1:B2 ; A1
+
+
+# Même motif, mêmes classes et même verdict que `sansFormule` de plugin-atelier/src/serveur/fabrique-outils.ts
+# (jeu de contrats fabrique/contrats-essai/demandes-document.json).
+# « + » et « - » : références en toutes lettres ; « @ » : majuscules seulement (un nom de compte reste du texte).
+_MOTIF_FORMULE = re.compile(r"^(?:[+\-]\s*" + _corps_formule("A-Za-z") + r"|@\s*" + _corps_formule("A-Z") + ")")
+
+
+def _sans_formule(valeur: str, chemin: str) -> str:
+    """Refuse un texte qui ressemble à une formule (NFKC, sans caractères Cf ni blancs de tête) ; le rend inchangé sinon."""
+    nu = "".join(c for c in unicodedata.normalize("NFKC", valeur) if unicodedata.category(c) != "Cf").lstrip()
+    if nu.startswith("=") or _MOTIF_FORMULE.match(nu):
+        _refuser(chemin, "texte qui ressemble à une formule : calculer le résultat et déposer le nombre ; "
+                         "la fabrique n'écrit aucune formule")
     return valeur
 
 
@@ -163,6 +201,8 @@ def _bloc(brut, chemin: str) -> dict:
         return {"type": genre, "ordonnee": ordonnee, "elements": elements}
     if genre == "tableau":
         return _tableau(brut, chemin)
+    if genre == "graphique":
+        return _graphique(brut, chemin)
     if genre == "saut_de_page":
         _objet(brut, chemin, ("type",))
         return {"type": genre}
@@ -174,16 +214,47 @@ def _bloc(brut, chemin: str) -> dict:
 
 def _tableau(brut: dict, chemin: str) -> dict:
     b = _objet(brut, chemin, ("type", "lignes"), ("entetes",))
-    entetes = [_texte(t, f"{chemin}.entetes[{i}]")
+    entetes = [_sans_formule(_texte(t, f"{chemin}.entetes[{i}]"), f"{chemin}.entetes[{i}]")
                for i, t in enumerate(_liste(b.get("entetes", []), f"{chemin}.entetes", LIMITE_COLONNES))]
     lignes = []
     for i, ligne in enumerate(_liste(b["lignes"], f"{chemin}.lignes", LIMITE_LIGNES)):
         cellules = _liste(ligne, f"{chemin}.lignes[{i}]", LIMITE_COLONNES)
-        lignes.append([_texte(t, f"{chemin}.lignes[{i}][{j}]") for j, t in enumerate(cellules)])
+        lignes.append([_sans_formule(_texte(t, f"{chemin}.lignes[{i}][{j}]"), f"{chemin}.lignes[{i}][{j}]")
+                       for j, t in enumerate(cellules)])
     colonnes = max([len(entetes)] + [len(ligne) for ligne in lignes])
     if colonnes == 0:
         _refuser(chemin, "tableau sans colonne")
     return {"type": "tableau", "entetes": entetes, "lignes": lignes, "colonnes": colonnes}
+
+
+def _graphique(brut: dict, chemin: str) -> dict:
+    b = _objet(brut, chemin, ("type", "genre", "titre", "categories", "series", "source", "texte_remplacement"),
+               ("sous_titre",))
+    categories = [_sans_formule(_texte(c, f"{chemin}.categories[{i}]", 1, LIMITE_TITRE_GRAPHIQUE),
+                                f"{chemin}.categories[{i}]")
+                  for i, c in enumerate(_liste(b["categories"], f"{chemin}.categories", LIMITE_CATEGORIES))]
+    if not categories:
+        _refuser(f"{chemin}.categories", "au moins une catégorie requise")
+    series = []
+    for i, brute in enumerate(_liste(b["series"], f"{chemin}.series", LIMITE_SERIES)):
+        s = _objet(brute, f"{chemin}.series[{i}]", ("nom", "valeurs"))
+        valeurs = _liste(s["valeurs"], f"{chemin}.series[{i}].valeurs", LIMITE_CATEGORIES)
+        if len(valeurs) != len(categories):
+            _refuser(f"{chemin}.series[{i}].valeurs", f"{len(categories)} valeurs attendues (une par catégorie)")
+        for j, valeur in enumerate(valeurs):
+            if isinstance(valeur, bool) or not isinstance(valeur, (int, float)) or not math.isfinite(valeur):
+                _refuser(f"{chemin}.series[{i}].valeurs[{j}]", "nombre fini attendu")
+        series.append({"nom": _sans_formule(_texte(s["nom"], f"{chemin}.series[{i}].nom", 1, LIMITE_TITRE_GRAPHIQUE),
+                                            f"{chemin}.series[{i}].nom"), "valeurs": list(valeurs)})
+    if not series:
+        _refuser(f"{chemin}.series", "au moins une série requise")
+    return {"type": "graphique", "genre": _enumere(b["genre"], f"{chemin}.genre", GENRES_GRAPHIQUE),
+            "titre": _texte(b["titre"], f"{chemin}.titre", 1, LIMITE_TITRE_GRAPHIQUE),
+            "sous_titre": _texte(b["sous_titre"], f"{chemin}.sous_titre", 1, LIMITE_TITRE) if "sous_titre" in b else None,
+            "categories": categories, "series": series,
+            "source": _texte(b["source"], f"{chemin}.source", 1, LIMITE_SOURCE),
+            "texte_remplacement": _texte(b["texte_remplacement"], f"{chemin}.texte_remplacement", 1,
+                                         LIMITE_TEXTE_REMPLACEMENT)}
 
 
 def _cellule(brut, chemin: str) -> dict:
@@ -191,7 +262,7 @@ def _cellule(brut, chemin: str) -> dict:
     genre = _enumere(c["type"], f"{chemin}.type", TYPES_CELLULE)
     valeur = c["valeur"]
     if genre == "texte":
-        valeur = _texte(valeur, f"{chemin}.valeur")
+        valeur = _sans_formule(_texte(valeur, f"{chemin}.valeur"), f"{chemin}.valeur")
     elif genre == "nombre":
         if isinstance(valeur, bool) or not isinstance(valeur, (int, float)) or not math.isfinite(valeur):
             _refuser(f"{chemin}.valeur", "nombre fini attendu")
@@ -277,6 +348,72 @@ def lire_demande(chemin: Path) -> dict:
     return valider_demande(brut)
 
 
+# ---------- charte du registre (écrite par le service, jamais par l'agent) ----------
+
+class CharteInvalide(Exception):
+    """charte.json ou logo.png écrits par le service sont inutilisables : panne interne, jamais un repli sobre."""
+
+
+_COULEUR_CHARTE = re.compile(r"#[0-9a-f]{6}")
+_CLES_COULEUR = ("titre", "corps", "entete_fond", "entete_texte", "serie")
+_CLES_CHARTE = {*_CLES_COULEUR, "police_titre", "police_texte", "logo"}
+
+
+def lire_charte(dossier: Path) -> dict | None:
+    """Rend la charte de `<dossier>/charte.json` (avec `logo_chemin` si `logo.png` y est annoncé), ou None si absente.
+
+    Seuls ces deux noms fixes, posés par le service à côté de demande.json, sont ouverts.
+    """
+    chemin = dossier / "charte.json"
+    if not chemin.exists():
+        return None
+    try:
+        charte = json.loads(chemin.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as erreur:
+        raise CharteInvalide(f"charte illisible : {type(erreur).__name__}") from None
+    if not isinstance(charte, dict) or set(charte) != _CLES_CHARTE:
+        raise CharteInvalide("charte invalide : clés inattendues")
+    for cle in _CLES_COULEUR:
+        if not isinstance(charte[cle], str) or not _COULEUR_CHARTE.fullmatch(charte[cle]):
+            raise CharteInvalide(f"charte invalide : couleur {cle}")
+    for cle in ("police_titre", "police_texte"):
+        if charte[cle] not in FAMILLES_CHARTE:
+            raise CharteInvalide(f"charte invalide : police {cle}")
+    if not isinstance(charte["logo"], bool):
+        raise CharteInvalide("charte invalide : logo")
+    charte["logo_chemin"] = None
+    if charte["logo"]:
+        charte["logo_chemin"] = _verifier_logo(dossier / "logo.png")
+    return charte
+
+
+def _verifier_logo(chemin: Path) -> Path:
+    """Le logo annoncé doit exister et se décoder en entier ; sinon échec franc."""
+    from PIL import Image
+
+    try:
+        with Image.open(io.BytesIO(chemin.read_bytes())) as image:
+            image.load()
+            valide = image.format == "PNG"
+    except Exception as erreur:  # noqa: BLE001 : tout défaut de lecture d'image est un logo illisible
+        raise CharteInvalide(f"logo illisible : {type(erreur).__name__}") from None
+    if not valide:
+        raise CharteInvalide("logo illisible : PNG attendu")
+    return chemin
+
+
+def _rgb_docx(couleur: str):
+    from docx.shared import RGBColor
+
+    return RGBColor.from_string(couleur[1:].upper())
+
+
+def _rgb_pptx(couleur: str):
+    from pptx.dml.color import RGBColor
+
+    return RGBColor.from_string(couleur[1:].upper())
+
+
 # ---------- aides communes ----------
 
 def _segments(texte: str, gras: list, italique: list) -> list[tuple[str, bool, bool]]:
@@ -309,9 +446,101 @@ def _proprietes_ooxml(props, demande: dict) -> None:
     props.modified = maintenant
 
 
+# ---------- graphique natif (docx et pptx) ----------
+# Les chiffres viennent de la demande et vont dans le XML du graphique ; aucun classeur n'est incorporé
+# (le contrôle d'archive refuse la relation « package », et xlsxwriter y transformerait un texte en formule).
+
+ACCENT_GRAPHIQUE = "#1F4E8C"
+# Un gris par série après la première : avec un seul, la légende ne les distingue plus.
+LIMITE_POINTS_ETIQUETTES = 30  # au-delà (catégories fois séries), les étiquettes de valeur sont illisibles
+GRIS_SERIES = ("#8C8C8C", "#404040", "#BFBFBF", "#666666", "#A6A6A6")
+# Le préfixe de langue fait écrire la virgule belge même quand l'outil de rendu est réglé en anglais.
+_CODES_NOMBRE = {"fr-BE": "[$-80C]General", "nl-BE": "[$-813]General", "en": "[$-409]General"}
+
+
+def _donnees_graphique(bloc: dict, langue: str):
+    from pptx.chart.data import CategoryChartData
+
+    donnees = CategoryChartData(number_format=_CODES_NOMBRE[langue])
+    donnees.categories = bloc["categories"]
+    for serie in bloc["series"]:
+        donnees.add_series(serie["nom"], serie["valeurs"])
+    return donnees
+
+
+def _type_graphique(genre: str):
+    from pptx.enum.chart import XL_CHART_TYPE
+
+    return {"colonnes": XL_CHART_TYPE.COLUMN_CLUSTERED, "barres": XL_CHART_TYPE.BAR_CLUSTERED,
+            "courbe": XL_CHART_TYPE.LINE_MARKERS}[genre]
+
+
+def _styler_graphique(graphique, bloc: dict, langue: str, charte: dict | None) -> None:
+    """Lecture honnête : axe à zéro (colonnes, barres sans valeur négative), accent puis gris, étiquettes de valeur."""
+    from pptx.enum.chart import XL_LABEL_POSITION, XL_LEGEND_POSITION, XL_TICK_LABEL_POSITION
+    from pptx.oxml.ns import qn
+    from pptx.util import Pt
+
+    code = _CODES_NOMBRE[langue]
+    accent = ACCENT_GRAPHIQUE if charte is None else charte["serie"]
+    graphique.has_title = False
+    graphique.has_legend = len(bloc["series"]) > 1
+    if graphique.has_legend:
+        graphique.legend.position = XL_LEGEND_POSITION.BOTTOM
+        graphique.legend.include_in_layout = False
+    graphique.font.size = Pt(11)
+    if charte is not None:
+        graphique.font.name = charte["police_texte"]
+        graphique.font.color.rgb = _rgb_pptx(charte["corps"])
+    trace = graphique.plots[0]
+    trace.has_data_labels = True
+    etiquettes = trace.data_labels
+    etiquettes.number_format = code
+    etiquettes.number_format_is_linked = False
+    etiquettes.position = XL_LABEL_POSITION.ABOVE if bloc["genre"] == "courbe" else XL_LABEL_POSITION.OUTSIDE_END
+    if len(bloc["categories"]) * len(bloc["series"]) > LIMITE_POINTS_ETIQUETTES:
+        trace.has_data_labels = False
+    for i, serie in enumerate(trace.series):
+        couleur = _rgb_pptx(accent if i == 0 else GRIS_SERIES[i - 1])
+        if bloc["genre"] == "courbe":
+            serie.smooth = False
+            serie.format.line.color.rgb = couleur
+            serie.format.line.width = Pt(2.25)
+            serie.marker.format.fill.solid()
+            serie.marker.format.fill.fore_color.rgb = couleur
+            serie.marker.format.line.color.rgb = couleur
+        else:
+            serie.format.fill.solid()
+            serie.format.fill.fore_color.rgb = couleur
+    graphique.category_axis.tick_label_position = XL_TICK_LABEL_POSITION.LOW
+    if bloc["genre"] == "barres":  # la première catégorie reste en haut, l'axe des valeurs en bas
+        graphique.category_axis.reverse_order = True
+        graphique.value_axis._element.find(qn("c:crosses")).set("val", "max")  # python-pptx n'a pas d'API pour cela
+    axe = graphique.value_axis
+    axe.tick_labels.number_format = code
+    axe.tick_labels.number_format_is_linked = False
+    axe.major_gridlines.format.line.color.rgb = _rgb_pptx("#D9D9D9")
+    if bloc["genre"] != "courbe" and all(v >= 0 for s in bloc["series"] for v in s["valeurs"]):
+        axe.minimum_scale = 0
+    # python-pptx écrit des identifiants d'axes négatifs ; le format OOXML exige de 0 à 2147483647
+    # (au-delà, LibreOffice perd le lien entre les axes et trace les barres à l'envers).
+    for noeud in graphique._chartSpace.iter(qn("c:axId"), qn("c:crossAx")):
+        noeud.set("val", str(int(noeud.get("val")) & 0x7FFFFFFF))
+
+
+def _xml_graphique(bloc: dict, langue: str, charte: dict | None) -> bytes:
+    from lxml import etree
+    from pptx.chart.chart import Chart
+    from pptx.oxml import parse_xml
+
+    racine = parse_xml(_donnees_graphique(bloc, langue).xml_bytes(_type_graphique(bloc["genre"])))
+    _styler_graphique(Chart(racine, None), bloc, langue, charte)
+    return etree.tostring(racine, xml_declaration=True, encoding="UTF-8", standalone=True)
+
+
 # ---------- docx ----------
 
-def _style_docx(document, langue: str) -> None:
+def _style_docx(document, langue: str, charte: dict | None = None) -> None:
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
     from docx.shared import Pt, RGBColor
@@ -319,18 +548,24 @@ def _style_docx(document, langue: str) -> None:
     tailles = {"Normal": 11, "Title": 24, "Heading 1": 18, "Heading 2": 14, "Heading 3": 12}
     for nom, taille in tailles.items():
         style = document.styles[nom]
-        style.font.name = POLICE
+        police = POLICE if charte is None else charte["police_texte" if nom == "Normal" else "police_titre"]
+        style.font.name = police
         style.font.size = Pt(taille)
         propriete = style.element.get_or_add_rPr()
         polices = propriete.get_or_add_rFonts()
         for attribut in ("w:ascii", "w:hAnsi", "w:cs", "w:eastAsia"):
-            polices.set(qn(attribut), POLICE)
+            polices.set(qn(attribut), police)
         for attribut in ("w:asciiTheme", "w:hAnsiTheme", "w:cstheme", "w:eastAsiaTheme"):
             if polices.get(qn(attribut)) is not None:
                 del polices.attrib[qn(attribut)]
         if nom != "Normal":
-            style.font.color.rgb = RGBColor(0x22, 0x22, 0x22)
+            style.font.color.rgb = RGBColor(0x22, 0x22, 0x22) if charte is None else _rgb_docx(charte["titre"])
             style.font.bold = True
+        elif charte is not None:
+            style.font.color.rgb = _rgb_docx(charte["corps"])
+        if charte is not None and nom == "Title":
+            for filet in style.element.xpath("w:pPr/w:pBdr/w:bottom"):
+                filet.set(qn("w:color"), charte["titre"][1:].upper())
     langue_xml = OxmlElement("w:lang")
     langue_xml.set(qn("w:val"), langue)
     langue_xml.set(qn("w:eastAsia"), langue)
@@ -380,7 +615,27 @@ def _ajouter_liste_docx(document, bloc: dict) -> None:
             num_pr.get_or_add_numId().val = numero
 
 
-def _ajouter_tableau_docx(document, bloc: dict) -> None:
+def _logo_entete_docx(document, chemin_logo: Path) -> None:
+    """Logo de 3 cm dans l'en-tête de chaque page (texte de remplacement « Logo »)."""
+    from docx.shared import Cm
+
+    for section in document.sections:
+        forme = section.header.paragraphs[0].add_run().add_picture(str(chemin_logo), width=Cm(3))
+        forme._inline.docPr.set("descr", "Logo")
+
+
+def _fond_cellule_docx(cellule, couleur: str) -> None:
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    ombrage = OxmlElement("w:shd")
+    ombrage.set(qn("w:val"), "clear")
+    ombrage.set(qn("w:color"), "auto")
+    ombrage.set(qn("w:fill"), couleur[1:].upper())
+    cellule._tc.get_or_add_tcPr().append(ombrage)
+
+
+def _ajouter_tableau_docx(document, bloc: dict, charte: dict | None = None) -> None:
     lignes = ([bloc["entetes"]] if bloc["entetes"] else []) + bloc["lignes"]
     tableau = document.add_table(rows=len(lignes), cols=bloc["colonnes"])
     tableau.style = "Table Grid"
@@ -389,16 +644,69 @@ def _ajouter_tableau_docx(document, bloc: dict) -> None:
             cellule = tableau.cell(i, j)
             cellule.text = ligne[j] if j < len(ligne) else ""
             if bloc["entetes"] and i == 0:
+                if charte is not None:
+                    _fond_cellule_docx(cellule, charte["entete_fond"])
                 for course in cellule.paragraphs[0].runs:
                     course.bold = True
+                    if charte is not None:
+                        course.font.color.rgb = _rgb_docx(charte["entete_texte"])
     document.add_paragraph()
 
 
-def generer_docx(demande: dict, chemin: Path) -> None:
+def _ajouter_graphique_docx(document, bloc: dict, langue: str, charte: dict | None) -> None:
+    """Titre, graphique natif (partie `/word/charts/chartN.xml`, texte de remplacement) et source, sans classeur."""
+    from docx.opc.constants import CONTENT_TYPE, RELATIONSHIP_TYPE
+    from docx.opc.packuri import PackURI
+    from docx.opc.part import Part
+    from docx.oxml import parse_xml
+    from docx.shared import Cm, Pt, RGBColor
+
+    def paragraphe(texte: str, taille: int, gras: bool, couleur, suite: bool):
+        p = document.add_paragraph()
+        p.paragraph_format.keep_with_next = suite
+        course = p.add_run(texte)
+        course.bold = gras or None
+        course.font.size = Pt(taille)
+        if couleur is not None:
+            course.font.color.rgb = couleur
+        if charte is not None and gras:
+            course.font.name = charte["police_titre"]
+        return p
+
+    paragraphe(bloc["titre"], 12, True, _rgb_docx(charte["titre"]) if charte is not None else None, True)
+    if bloc["sous_titre"]:
+        paragraphe(bloc["sous_titre"], 10, False, RGBColor(0x59, 0x59, 0x59), True)
+    package = document.part.package
+    partie = Part(package.next_partname("/word/charts/chart%d.xml"), CONTENT_TYPE.DML_CHART,
+                  _xml_graphique(bloc, langue, charte), package)
+    identifiant = max(document.part.next_id, 2)  # 1 est pris par le logo de l'en-tête
+    espaces = ('xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+               'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" '
+               'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
+               'xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" '
+               'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"')
+    course = parse_xml(
+        f'<w:r {espaces}><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">'
+        f'<wp:extent cx="{Cm(14.5)}" cy="{Cm(8)}"/><wp:docPr id="{identifiant}"/>'
+        f'<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">'
+        f'<c:chart r:id="{document.part.relate_to(partie, RELATIONSHIP_TYPE.CHART)}"/>'
+        f'</a:graphicData></a:graphic></wp:inline></w:drawing></w:r>')
+    doc_pr = course.xpath(".//wp:docPr")[0]
+    doc_pr.set("name", f"Graphique {identifiant}")
+    doc_pr.set("descr", bloc["texte_remplacement"])
+    image = document.add_paragraph()
+    image.paragraph_format.keep_with_next = True
+    image._p.append(course)
+    paragraphe(f"Source : {bloc['source']}", 9, False, RGBColor(0x59, 0x59, 0x59), False)
+
+
+def generer_docx(demande: dict, chemin: Path, charte: dict | None = None) -> None:
     from docx import Document
 
     document = Document()
-    _style_docx(document, demande["langue"])
+    _style_docx(document, demande["langue"], charte)
+    if charte is not None and charte["logo_chemin"]:
+        _logo_entete_docx(document, charte["logo_chemin"])
     _proprietes_ooxml(document.core_properties, demande)
     document.add_paragraph(demande["titre"], style="Title")
     for bloc in demande["blocs"]:
@@ -410,7 +718,9 @@ def generer_docx(demande: dict, chemin: Path) -> None:
         elif genre == "liste":
             _ajouter_liste_docx(document, bloc)
         elif genre == "tableau":
-            _ajouter_tableau_docx(document, bloc)
+            _ajouter_tableau_docx(document, bloc, charte)
+        elif genre == "graphique":
+            _ajouter_graphique_docx(document, bloc, demande["langue"], charte)
         elif genre == "saut_de_page":
             document.add_page_break()
     document.save(str(chemin))
@@ -438,9 +748,20 @@ def _ecrire_cellule_xlsx(feuille, ligne: int, colonne: int, cellule: dict) -> in
     return len(str(valeur))
 
 
-def generer_xlsx(demande: dict, chemin: Path) -> None:
+def _styles_xlsx(charte: dict):
+    """(police du corps, police de la première ligne, fond de la première ligne) d'une charte."""
+    from openpyxl.styles import Font, PatternFill
+
+    return (Font(name=charte["police_texte"], color=charte["corps"][1:].upper()),
+            Font(name=charte["police_texte"], bold=True, color=charte["entete_texte"][1:].upper()),
+            PatternFill("solid", fgColor=charte["entete_fond"][1:].upper()))
+
+
+def generer_xlsx(demande: dict, chemin: Path, charte: dict | None = None) -> None:
     from openpyxl import Workbook
     from openpyxl.utils import get_column_letter
+
+    styles = _styles_xlsx(charte) if charte is not None else None
 
     classeur = Workbook()
     classeur.remove(classeur.active)
@@ -459,6 +780,11 @@ def generer_xlsx(demande: dict, chemin: Path) -> None:
         for i, ligne in enumerate(brute["lignes"], start=1):
             for j, cellule in enumerate(ligne, start=1):
                 largeur = _ecrire_cellule_xlsx(feuille, i, j, cellule)
+                if styles is not None:
+                    cible = feuille.cell(row=i, column=j)
+                    cible.font = styles[1] if i == 1 else styles[0]
+                    if i == 1:
+                        cible.fill = styles[2]
                 largeurs[j] = max(largeurs.get(j, 0), largeur)
         for j, largeur in largeurs.items():
             feuille.column_dimensions[get_column_letter(j)].width = min(60, max(10, largeur + 2))
@@ -471,13 +797,37 @@ _PARAGRAPHES_PAR_DIAPO = 7
 _LIGNES_TABLEAU_PAR_DIAPO = 12
 
 
+def _style_masque_pptx(prs, charte: dict) -> None:
+    """Couleur et famille des titres et du corps, posées sur le masque (les diapositives en héritent)."""
+    from lxml import etree
+    from pptx.oxml.ns import qn
+
+    styles = prs.slide_master.element.find(qn("p:txStyles"))
+    for branche, couleur, police in (("p:titleStyle", charte["titre"], charte["police_titre"]),
+                                     ("p:bodyStyle", charte["corps"], charte["police_texte"])):
+        for rpr in styles.find(qn(branche)).iter(qn("a:defRPr")):
+            for ancien in rpr.findall(qn("a:solidFill")) + rpr.findall(qn("a:latin")):
+                rpr.remove(ancien)
+            plein = etree.Element(qn("a:solidFill"))
+            etree.SubElement(plein, qn("a:srgbClr")).set("val", couleur[1:].upper())
+            latin = etree.Element(qn("a:latin"))
+            latin.set("typeface", police)
+            rpr.insert(0, plein)
+            rpr.insert(1, latin)
+
+
 class _Presentation:
     """Construit les diapositives au fil des blocs : un titre de niveau 1 ouvre une diapositive."""
 
-    def __init__(self, demande: dict):
+    def __init__(self, demande: dict, charte: dict | None = None):
         from pptx import Presentation
+        from pptx.util import Inches
 
+        self.charte = charte
+        self.langue = demande["langue"]
         self.prs = Presentation()
+        if charte is not None:
+            _style_masque_pptx(self.prs, charte)
         _proprietes_ooxml(self.prs.core_properties, demande)
         self.titre_courant = demande["titre"]
         self.diapo = None
@@ -488,6 +838,9 @@ class _Presentation:
         couverture.shapes.title.text = demande["titre"]
         sous_titre = couverture.placeholders[1]
         sous_titre._element.getparent().remove(sous_titre._element)
+        if charte is not None and charte["logo_chemin"]:
+            logo = couverture.shapes.add_picture(str(charte["logo_chemin"]), Inches(0.4), Inches(0.3), width=Inches(1.4))
+            logo._element.nvPicPr.cNvPr.set("descr", "Logo")
 
     def _ouvrir(self, layout: int = 1) -> None:
         titre = self.titre_courant + (" (suite)" if self.suite else "")
@@ -537,14 +890,60 @@ class _Presentation:
             self._ouvrir(layout=5)
             forme = self.diapo.shapes.add_table(len(morceau), bloc["colonnes"], Inches(0.5), Inches(1.8),
                                                 Inches(9), Inches(0.4) * len(morceau))
+            if self.charte is not None:
+                forme.table.horz_banding = False  # le gabarit teinte les lignes en bleuté
+                forme.table.first_row = bool(entete)
             for i, ligne in enumerate(morceau):
                 for j in range(bloc["colonnes"]):
                     cellule = forme.table.cell(i, j)
                     cellule.text = ligne[j] if j < len(ligne) else ""
+                    est_entete = bool(entete) and i == 0
+                    if self.charte is not None and est_entete:
+                        cellule.fill.solid()
+                        cellule.fill.fore_color.rgb = _rgb_pptx(self.charte["entete_fond"])
+                    elif self.charte is not None:
+                        cellule.fill.background()  # sans cela, le style du gabarit teinte les lignes en bleuté
                     for paragraphe in cellule.text_frame.paragraphs:
                         for course in paragraphe.runs:
                             course.font.size = Pt(12)
+                            if self.charte is not None:
+                                course.font.name = self.charte["police_texte"]
+                                course.font.color.rgb = _rgb_pptx(self.charte["entete_texte" if est_entete else "corps"])
             self.diapo = None
+
+    def graphique(self, bloc: dict) -> None:
+        """Diapositive dédiée : titre en 28 points, graphique natif sans classeur, source dessous."""
+        from pptx.oxml.ns import qn
+        from pptx.util import Inches, Pt
+
+        self._ouvrir(layout=5)
+        titre = self.diapo.shapes.title
+        titre.text = bloc["titre"]
+        for paragraphe in titre.text_frame.paragraphs:
+            for course in paragraphe.runs:
+                course.font.size = Pt(28)
+        if bloc["sous_titre"]:
+            self._zone_texte(bloc["sous_titre"], Inches(1.5), Inches(0.4), 16)
+        forme = self.diapo.shapes.add_chart(_type_graphique(bloc["genre"]), Inches(0.5), Inches(2.0), Inches(9),
+                                            Inches(4.2), _donnees_graphique(bloc, self.langue))
+        forme._element.nvGraphicFramePr.cNvPr.set("descr", bloc["texte_remplacement"])
+        _styler_graphique(forme.chart, bloc, self.langue, self.charte)
+        racine = forme.chart.part._element
+        externe = racine.find(qn("c:externalData"))
+        racine.remove(externe)
+        forme.chart.part.drop_rel(externe.get(qn("r:id")))
+        self._zone_texte(f"Source : {bloc['source']}", Inches(6.3), Inches(0.9), 11)
+        self.diapo = None
+
+    def _zone_texte(self, texte: str, haut, hauteur, taille: int) -> None:
+        from pptx.util import Inches, Pt
+
+        zone = self.diapo.shapes.add_textbox(Inches(0.5), haut, Inches(9), hauteur)
+        zone.text_frame.word_wrap = True
+        course = zone.text_frame.paragraphs[0].add_run()
+        course.text = texte
+        course.font.size = Pt(taille)
+        course.font.color.rgb = _rgb_pptx("#595959")
 
     def terminer(self) -> None:
         for diapo in self.prs.slides:
@@ -553,8 +952,8 @@ class _Presentation:
                     forme._element.getparent().remove(forme._element)
 
 
-def generer_pptx(demande: dict, chemin: Path) -> None:
-    presentation = _Presentation(demande)
+def generer_pptx(demande: dict, chemin: Path, charte: dict | None = None) -> None:
+    presentation = _Presentation(demande, charte)
     for bloc in demande["blocs"]:
         genre = bloc["type"]
         if genre == "titre" and bloc["niveau"] == 1:
@@ -567,6 +966,8 @@ def generer_pptx(demande: dict, chemin: Path) -> None:
             presentation.liste(bloc)
         elif genre == "tableau":
             presentation.tableau(bloc)
+        elif genre == "graphique":
+            presentation.graphique(bloc)
         elif genre == "saut_de_page":
             presentation.saut()
     presentation.terminer()
@@ -585,7 +986,7 @@ def generer(chemin_demande: Path, dossier_sortie: Path) -> dict:
     nom = "document.docx" if format_ == "pdf" else f"document.{format_}"
     if not dossier_sortie.is_dir():
         raise DemandeInvalide("dossier de sortie introuvable")
-    _GENERATEURS[format_](demande, dossier_sortie / nom)
+    _GENERATEURS[format_](demande, dossier_sortie / nom, lire_charte(chemin_demande.parent))
     return {"fichier": nom, "intermediaire_pdf": format_ == "pdf"}
 
 
@@ -601,6 +1002,32 @@ def _texte_docx(chemin: Path) -> list[str]:
     lignes = [p.text for p in document.paragraphs]
     for tableau in document.tables:
         lignes.extend(" | ".join(c.text for c in ligne.cells) for ligne in tableau.rows)
+    # texte de remplacement des graphiques (le logo, lui, n'est pas du contenu)
+    lignes.extend(d for d in document.element.body.xpath(".//wp:docPr/@descr") if d != "Logo")
+    for partie in (r.target_part for r in document.part.rels.values() if r.reltype.endswith("/chart")):
+        lignes.extend(_lignes_graphique_docx(partie.blob))
+    return lignes
+
+
+def _lignes_graphique_docx(xml: bytes) -> list[str]:
+    """Catégories puis une ligne par série, lues dans les caches du XML du graphique (comme `_texte_pptx`)."""
+    from lxml import etree
+
+    ns = {"c": "http://schemas.openxmlformats.org/drawingml/2006/chart"}
+    series = etree.fromstring(xml, etree.XMLParser(resolve_entities=False, no_network=True)).xpath(".//c:ser", namespaces=ns)
+
+    def valeurs(noeud, chemin: str) -> list[str]:
+        return [v.text or "" for v in noeud.xpath(chemin, namespaces=ns)]
+
+    def nombre(texte: str) -> str:
+        try:
+            return f"{float(texte):.15g}"
+        except ValueError:
+            return texte
+
+    lignes = [" | ".join(valeurs(series[0], "c:cat//c:v"))] if series else []
+    lignes.extend(" ".join(valeurs(s, "c:tx//c:v")) + " : " + " | ".join(nombre(v) for v in valeurs(s, "c:val//c:v"))
+                  for s in series)
     return lignes
 
 
@@ -630,6 +1057,10 @@ def _texte_pptx(chemin: Path) -> list[str]:
                 lignes.extend(p.text for p in forme.text_frame.paragraphs)
             if getattr(forme, "has_table", False) and forme.has_table:
                 lignes.extend(" | ".join(c.text for c in ligne.cells) for ligne in forme.table.rows)
+            if getattr(forme, "has_chart", False) and forme.has_chart:
+                trace = forme.chart.plots[0]
+                lignes.append(" | ".join(trace.categories))
+                lignes.extend(f"{s.name} : " + " | ".join(f"{v:.15g}" for v in s.values) for s in trace.series)
     return lignes
 
 

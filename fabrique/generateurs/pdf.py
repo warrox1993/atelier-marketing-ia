@@ -43,6 +43,10 @@ CLES_INTERDITES = ("/JavaScript", "/JS", "/OpenAction", "/AA", "/Launch", "/Embe
                    "/EmbeddedFile", "/RichMedia")
 SOFFICE = "/usr/bin/soffice"
 PROFIL_LO = "/tmp/lo"
+# Polices des chartes (Archivo, Source Serif 4), sous la racine de la fabrique montée en lecture dans la cage ;
+# HOME y vaut /tmp, donc fontconfig lit /tmp/.fonts.
+POLICES_FABRIQUE = "/opt/atelier-fabrique/lib/fabrique/polices"
+DOSSIER_POLICES_UTILISATEUR = "/tmp/.fonts"
 
 # Profil LibreOffice. Chaque clé vient du schéma officiel installé :
 # /usr/lib/libreoffice/share/registry/main.xcd (composant : chemin, nom, type, défaut).
@@ -95,6 +99,8 @@ def lancer_conversion(source: str, sortie: str) -> None:
     (user / "registrymodifications.xcu").write_text(PROFIL_XCU, encoding="utf-8")
     (user / "config").mkdir(exist_ok=True)
     (user / "config" / FICHIER_JAVA).write_text(JAVA_COUPE_XML, encoding="utf-8")
+    if os.path.isdir(POLICES_FABRIQUE) and not os.path.lexists(DOSSIER_POLICES_UTILISATEUR):
+        os.symlink(POLICES_FABRIQUE, DOSSIER_POLICES_UTILISATEUR)
     argv = [SOFFICE, "--headless", "--norestore", "--nolockcheck", "--nodefault", "--nologo",
             f"-env:UserInstallation=file://{PROFIL_LO}", "--convert-to", "pdf",
             "--outdir", sortie, source]

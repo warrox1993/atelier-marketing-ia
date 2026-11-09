@@ -27,7 +27,8 @@ done
 for f in "${RACINE}"/scripts/tests/tester-*.sh; do suites+=("bash ${f#"${RACINE}/"}"); done
 suites+=("bash scripts/bootstrap-tests.sh" "bash scripts/tests-serveur.sh"
          "cd plugin-atelier && pnpm typecheck" "cd plugin-atelier && pnpm test"
-         "cd passerelle && pnpm typecheck" "cd passerelle && pnpm test")
+         "cd passerelle && pnpm typecheck" "cd passerelle && pnpm test"
+         "cd paperclip/server && npx vitest run --config ${RACINE}/tests/socle/vitest.config.ts")
 
 echecs=()
 lancees=0

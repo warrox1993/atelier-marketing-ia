@@ -390,6 +390,19 @@ describe("tache.prospects.deposer", () => {
     expect(valide.score!.criteres.map((c) => c.code)).toEqual(["source_registre_officiel", "courriel_impersonnel", "telephone_present"]);
   });
 
+  it("un prospect connu redéposé garde ses sources et reçoit celle du nouveau dépôt (#58)", async () => {
+    const f = banc();
+    const premier = await f.deposer(depotBce());
+    const avant = (premier.body.prospects as Prospect[]).find((p) => p.numeroBce === "0123.456.749")!;
+    const second = await f.deposer(depotBce());
+    const apres = (second.body.prospects as Prospect[]).find((p) => p.numeroBce === "0123.456.749")!;
+    const idsAvant = avant.sources.map((s) => s.sourceId);
+    const idsApres = apres.sources.map((s) => s.sourceId);
+    expect(idsApres).toHaveLength(2);
+    expect(idsApres.slice(0, 1)).toEqual(idsAvant);
+    expect(idsApres[1]).not.toBe(idsAvant[0]);
+  });
+
   it("redépôt : la fiche d'origine ne devient jamais le doublon d'un prospect arrivé après elle", async () => {
     const f = banc();
     const a = entite("0123.456.749", "Toitures de Meuse", { tel: "+32 4 000 11 22" });

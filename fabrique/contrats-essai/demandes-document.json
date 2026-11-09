@@ -173,7 +173,7 @@
    "valide": true
   },
   {
-   "nom": "xlsx cellule texte qui ressemble a une formule reste du texte",
+   "nom": "xlsx cellule texte qui ressemble a une formule est refusee",
    "demande": {
     "format": "xlsx",
     "modele": "sobre",
@@ -193,7 +193,7 @@
      }
     ]
    },
-   "valide": true
+   "valide": false
   },
   {
    "nom": "docx langue neerlandaise",
@@ -299,6 +299,23 @@
      }
     ],
     "sortie": "../../x"
+   },
+   "valide": false
+  },
+  {
+   "nom": "champ charte refuse (la charte vient du registre, jamais de l'agent)",
+   "demande": {
+    "format": "docx",
+    "modele": "sobre",
+    "titre": "Offre",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "paragraphe",
+      "texte": "Un texte"
+     }
+    ],
+    "charte": "document"
    },
    "valide": false
   },
@@ -1284,6 +1301,1637 @@
      {
       "nom": "F19",
       "lignes": []
+     }
+    ]
+   },
+   "valide": true
+  },
+  {
+   "nom": "xlsx cellule +SOMME est refusee",
+   "demande": {
+    "format": "xlsx",
+    "modele": "sobre",
+    "titre": "Budget",
+    "langue": "fr-BE",
+    "feuilles": [
+     {
+      "nom": "F",
+      "lignes": [
+       [
+        {
+         "type": "texte",
+         "valeur": "+SOMME(A1)"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "xlsx cellule +SOMME accentuee est refusee",
+   "demande": {
+    "format": "xlsx",
+    "modele": "sobre",
+    "titre": "Budget",
+    "langue": "fr-BE",
+    "feuilles": [
+     {
+      "nom": "F",
+      "lignes": [
+       [
+        {
+         "type": "texte",
+         "valeur": "+SOMM\u00c9(A1)"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "xlsx cellule @SUM est refusee",
+   "demande": {
+    "format": "xlsx",
+    "modele": "sobre",
+    "titre": "Budget",
+    "langue": "fr-BE",
+    "feuilles": [
+     {
+      "nom": "F",
+      "lignes": [
+       [
+        {
+         "type": "texte",
+         "valeur": "@SUM(A1)"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "xlsx cellule DDE est refusee",
+   "demande": {
+    "format": "xlsx",
+    "modele": "sobre",
+    "titre": "Budget",
+    "langue": "fr-BE",
+    "feuilles": [
+     {
+      "nom": "F",
+      "lignes": [
+       [
+        {
+         "type": "texte",
+         "valeur": "+cmd|' /c calc'!A1"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "xlsx cellule reference de feuille est refusee",
+   "demande": {
+    "format": "xlsx",
+    "modele": "sobre",
+    "titre": "Budget",
+    "langue": "fr-BE",
+    "feuilles": [
+     {
+      "nom": "F",
+      "lignes": [
+       [
+        {
+         "type": "texte",
+         "valeur": "+Feuil1!A1"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "xlsx cellule reference de cellule est refusee",
+   "demande": {
+    "format": "xlsx",
+    "modele": "sobre",
+    "titre": "Budget",
+    "langue": "fr-BE",
+    "feuilles": [
+     {
+      "nom": "F",
+      "lignes": [
+       [
+        {
+         "type": "texte",
+         "valeur": "-A1+B2"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "xlsx cellule egal precede d'un caractere invisible est refusee",
+   "demande": {
+    "format": "xlsx",
+    "modele": "sobre",
+    "titre": "Budget",
+    "langue": "fr-BE",
+    "feuilles": [
+     {
+      "nom": "F",
+      "lignes": [
+       [
+        {
+         "type": "texte",
+         "valeur": "\u200b=1+1"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "xlsx cellule egal pleine chasse est refusee",
+   "demande": {
+    "format": "xlsx",
+    "modele": "sobre",
+    "titre": "Budget",
+    "langue": "fr-BE",
+    "feuilles": [
+     {
+      "nom": "F",
+      "lignes": [
+       [
+        {
+         "type": "texte",
+         "valeur": "\uff1d1+1"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "xlsx cellule egal precede de blancs est refusee",
+   "demande": {
+    "format": "xlsx",
+    "modele": "sobre",
+    "titre": "Budget",
+    "langue": "fr-BE",
+    "feuilles": [
+     {
+      "nom": "F",
+      "lignes": [
+       [
+        {
+         "type": "texte",
+         "valeur": "  =1+1"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "docx tableau cellule egal est refusee",
+   "demande": {
+    "format": "docx",
+    "modele": "sobre",
+    "titre": "Offre",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "tableau",
+      "lignes": [
+       [
+        "ok",
+        "=SOMME(A1)"
+       ]
+      ]
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "docx tableau entete egal est refusee",
+   "demande": {
+    "format": "docx",
+    "modele": "sobre",
+    "titre": "Offre",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "tableau",
+      "lignes": [
+       [
+        "ok"
+       ]
+      ],
+      "entetes": [
+       "=1+1"
+      ]
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "pptx tableau cellule +SOMME est refusee",
+   "demande": {
+    "format": "pptx",
+    "modele": "sobre",
+    "titre": "Offre",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "tableau",
+      "lignes": [
+       [
+        "+SOMME(A1)"
+       ]
+      ]
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "xlsx numero de telephone reste du texte",
+   "demande": {
+    "format": "xlsx",
+    "modele": "sobre",
+    "titre": "Budget",
+    "langue": "fr-BE",
+    "feuilles": [
+     {
+      "nom": "F",
+      "lignes": [
+       [
+        {
+         "type": "texte",
+         "valeur": "+32 470 12 34 56"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "valide": true
+  },
+  {
+   "nom": "xlsx pourcentage negatif reste du texte",
+   "demande": {
+    "format": "xlsx",
+    "modele": "sobre",
+    "titre": "Budget",
+    "langue": "fr-BE",
+    "feuilles": [
+     {
+      "nom": "F",
+      "lignes": [
+       [
+        {
+         "type": "texte",
+         "valeur": "-5 %"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "valide": true
+  },
+  {
+   "nom": "xlsx mention reste du texte",
+   "demande": {
+    "format": "xlsx",
+    "modele": "sobre",
+    "titre": "Budget",
+    "langue": "fr-BE",
+    "feuilles": [
+     {
+      "nom": "F",
+      "lignes": [
+       [
+        {
+         "type": "texte",
+         "valeur": "@marque"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "valide": true
+  },
+  {
+   "nom": "xlsx soustraction de nombres reste du texte",
+   "demande": {
+    "format": "xlsx",
+    "modele": "sobre",
+    "titre": "Budget",
+    "langue": "fr-BE",
+    "feuilles": [
+     {
+      "nom": "F",
+      "lignes": [
+       [
+        {
+         "type": "texte",
+         "valeur": "-2+3"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "valide": true
+  },
+  {
+   "nom": "docx tableau numero de telephone reste du texte",
+   "demande": {
+    "format": "docx",
+    "modele": "sobre",
+    "titre": "Offre",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "tableau",
+      "lignes": [
+       [
+        "ok",
+        "+32 470 12 34 56"
+       ]
+      ]
+     }
+    ]
+   },
+   "valide": true
+  },
+  {
+   "nom": "docx graphique valide",
+   "demande": {
+    "format": "docx",
+    "modele": "sobre",
+    "titre": "Rapport",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "graphique",
+      "genre": "colonnes",
+      "titre": "Ventes par ann\u00e9e",
+      "categories": [
+       "2025",
+       "2026"
+      ],
+      "series": [
+       {
+        "nom": "Ventes",
+        "valeurs": [
+         21,
+         28.5
+        ]
+       }
+      ],
+      "source": "Direction financi\u00e8re",
+      "texte_remplacement": "Ventes : 21 en 2025, 28,5 en 2026."
+     }
+    ]
+   },
+   "valide": true
+  },
+  {
+   "nom": "pptx graphique valide",
+   "demande": {
+    "format": "pptx",
+    "modele": "sobre",
+    "titre": "Rapport",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "graphique",
+      "genre": "colonnes",
+      "titre": "Ventes par ann\u00e9e",
+      "categories": [
+       "2025",
+       "2026"
+      ],
+      "series": [
+       {
+        "nom": "Ventes",
+        "valeurs": [
+         21,
+         28.5
+        ]
+       }
+      ],
+      "source": "Direction financi\u00e8re",
+      "texte_remplacement": "Ventes : 21 en 2025, 28,5 en 2026."
+     }
+    ]
+   },
+   "valide": true
+  },
+  {
+   "nom": "pdf graphique valide",
+   "demande": {
+    "format": "pdf",
+    "modele": "sobre",
+    "titre": "Rapport",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "graphique",
+      "genre": "colonnes",
+      "titre": "Ventes par ann\u00e9e",
+      "categories": [
+       "2025",
+       "2026"
+      ],
+      "series": [
+       {
+        "nom": "Ventes",
+        "valeurs": [
+         21,
+         28.5
+        ]
+       }
+      ],
+      "source": "Direction financi\u00e8re",
+      "texte_remplacement": "Ventes : 21 en 2025, 28,5 en 2026."
+     }
+    ]
+   },
+   "valide": true
+  },
+  {
+   "nom": "docx graphique valide avec sous-titre et plusieurs genres",
+   "demande": {
+    "format": "docx",
+    "modele": "sobre",
+    "titre": "Rapport",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "graphique",
+      "genre": "colonnes",
+      "titre": "Ventes par ann\u00e9e",
+      "categories": [
+       "2025",
+       "2026"
+      ],
+      "series": [
+       {
+        "nom": "Ventes",
+        "valeurs": [
+         21,
+         28.5
+        ]
+       }
+      ],
+      "source": "Direction financi\u00e8re",
+      "texte_remplacement": "Ventes : 21 en 2025, 28,5 en 2026.",
+      "sous_titre": "En millions"
+     },
+     {
+      "type": "graphique",
+      "genre": "barres",
+      "titre": "Ventes par ann\u00e9e",
+      "categories": [
+       "2025",
+       "2026"
+      ],
+      "series": [
+       {
+        "nom": "Ventes",
+        "valeurs": [
+         21,
+         28.5
+        ]
+       }
+      ],
+      "source": "Direction financi\u00e8re",
+      "texte_remplacement": "Ventes : 21 en 2025, 28,5 en 2026."
+     },
+     {
+      "type": "graphique",
+      "genre": "courbe",
+      "titre": "Ventes par ann\u00e9e",
+      "categories": [
+       "2025",
+       "2026"
+      ],
+      "series": [
+       {
+        "nom": "Ventes",
+        "valeurs": [
+         21,
+         28.5
+        ]
+       }
+      ],
+      "source": "Direction financi\u00e8re",
+      "texte_remplacement": "Ventes : 21 en 2025, 28,5 en 2026."
+     }
+    ]
+   },
+   "valide": true
+  },
+  {
+   "nom": "docx graphique refuse : genre inconnu",
+   "demande": {
+    "format": "docx",
+    "modele": "sobre",
+    "titre": "Rapport",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "graphique",
+      "genre": "anneau",
+      "titre": "Ventes par ann\u00e9e",
+      "categories": [
+       "2025",
+       "2026"
+      ],
+      "series": [
+       {
+        "nom": "Ventes",
+        "valeurs": [
+         21,
+         28.5
+        ]
+       }
+      ],
+      "source": "Direction financi\u00e8re",
+      "texte_remplacement": "Ventes : 21 en 2025, 28,5 en 2026."
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "docx graphique refuse : genre en trois dimensions",
+   "demande": {
+    "format": "docx",
+    "modele": "sobre",
+    "titre": "Rapport",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "graphique",
+      "genre": "colonnes_3d",
+      "titre": "Ventes par ann\u00e9e",
+      "categories": [
+       "2025",
+       "2026"
+      ],
+      "series": [
+       {
+        "nom": "Ventes",
+        "valeurs": [
+         21,
+         28.5
+        ]
+       }
+      ],
+      "source": "Direction financi\u00e8re",
+      "texte_remplacement": "Ventes : 21 en 2025, 28,5 en 2026."
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "docx graphique refuse : source absente",
+   "demande": {
+    "format": "docx",
+    "modele": "sobre",
+    "titre": "Rapport",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "graphique",
+      "genre": "colonnes",
+      "titre": "Ventes par ann\u00e9e",
+      "categories": [
+       "2025",
+       "2026"
+      ],
+      "series": [
+       {
+        "nom": "Ventes",
+        "valeurs": [
+         21,
+         28.5
+        ]
+       }
+      ],
+      "texte_remplacement": "Ventes : 21 en 2025, 28,5 en 2026."
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "docx graphique refuse : texte de remplacement absent",
+   "demande": {
+    "format": "docx",
+    "modele": "sobre",
+    "titre": "Rapport",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "graphique",
+      "genre": "colonnes",
+      "titre": "Ventes par ann\u00e9e",
+      "categories": [
+       "2025",
+       "2026"
+      ],
+      "series": [
+       {
+        "nom": "Ventes",
+        "valeurs": [
+         21,
+         28.5
+        ]
+       }
+      ],
+      "source": "Direction financi\u00e8re"
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "docx graphique refuse : source vide",
+   "demande": {
+    "format": "docx",
+    "modele": "sobre",
+    "titre": "Rapport",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "graphique",
+      "genre": "colonnes",
+      "titre": "Ventes par ann\u00e9e",
+      "categories": [
+       "2025",
+       "2026"
+      ],
+      "series": [
+       {
+        "nom": "Ventes",
+        "valeurs": [
+         21,
+         28.5
+        ]
+       }
+      ],
+      "source": "",
+      "texte_remplacement": "Ventes : 21 en 2025, 28,5 en 2026."
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "docx graphique refuse : valeurs en nombre different des categories",
+   "demande": {
+    "format": "docx",
+    "modele": "sobre",
+    "titre": "Rapport",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "graphique",
+      "genre": "colonnes",
+      "titre": "Ventes par ann\u00e9e",
+      "categories": [
+       "2025",
+       "2026"
+      ],
+      "series": [
+       {
+        "nom": "V",
+        "valeurs": [
+         1
+        ]
+       }
+      ],
+      "source": "Direction financi\u00e8re",
+      "texte_remplacement": "Ventes : 21 en 2025, 28,5 en 2026."
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "docx graphique refuse : valeur non numerique",
+   "demande": {
+    "format": "docx",
+    "modele": "sobre",
+    "titre": "Rapport",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "graphique",
+      "genre": "colonnes",
+      "titre": "Ventes par ann\u00e9e",
+      "categories": [
+       "2025",
+       "2026"
+      ],
+      "series": [
+       {
+        "nom": "V",
+        "valeurs": [
+         1,
+         "deux"
+        ]
+       }
+      ],
+      "source": "Direction financi\u00e8re",
+      "texte_remplacement": "Ventes : 21 en 2025, 28,5 en 2026."
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "docx graphique refuse : valeur booleenne",
+   "demande": {
+    "format": "docx",
+    "modele": "sobre",
+    "titre": "Rapport",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "graphique",
+      "genre": "colonnes",
+      "titre": "Ventes par ann\u00e9e",
+      "categories": [
+       "2025",
+       "2026"
+      ],
+      "series": [
+       {
+        "nom": "V",
+        "valeurs": [
+         1,
+         true
+        ]
+       }
+      ],
+      "source": "Direction financi\u00e8re",
+      "texte_remplacement": "Ventes : 21 en 2025, 28,5 en 2026."
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "docx graphique refuse : valeur manquante",
+   "demande": {
+    "format": "docx",
+    "modele": "sobre",
+    "titre": "Rapport",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "graphique",
+      "genre": "colonnes",
+      "titre": "Ventes par ann\u00e9e",
+      "categories": [
+       "2025",
+       "2026"
+      ],
+      "series": [
+       {
+        "nom": "V",
+        "valeurs": [
+         1,
+         null
+        ]
+       }
+      ],
+      "source": "Direction financi\u00e8re",
+      "texte_remplacement": "Ventes : 21 en 2025, 28,5 en 2026."
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "docx graphique refuse : trop de series",
+   "demande": {
+    "format": "docx",
+    "modele": "sobre",
+    "titre": "Rapport",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "graphique",
+      "genre": "colonnes",
+      "titre": "Ventes par ann\u00e9e",
+      "categories": [
+       "2025",
+       "2026"
+      ],
+      "series": [
+       {
+        "nom": "S0",
+        "valeurs": [
+         1,
+         2
+        ]
+       },
+       {
+        "nom": "S1",
+        "valeurs": [
+         1,
+         2
+        ]
+       },
+       {
+        "nom": "S2",
+        "valeurs": [
+         1,
+         2
+        ]
+       },
+       {
+        "nom": "S3",
+        "valeurs": [
+         1,
+         2
+        ]
+       },
+       {
+        "nom": "S4",
+        "valeurs": [
+         1,
+         2
+        ]
+       },
+       {
+        "nom": "S5",
+        "valeurs": [
+         1,
+         2
+        ]
+       },
+       {
+        "nom": "S6",
+        "valeurs": [
+         1,
+         2
+        ]
+       }
+      ],
+      "source": "Direction financi\u00e8re",
+      "texte_remplacement": "Ventes : 21 en 2025, 28,5 en 2026."
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "docx graphique refuse : aucune serie",
+   "demande": {
+    "format": "docx",
+    "modele": "sobre",
+    "titre": "Rapport",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "graphique",
+      "genre": "colonnes",
+      "titre": "Ventes par ann\u00e9e",
+      "categories": [
+       "2025",
+       "2026"
+      ],
+      "series": [],
+      "source": "Direction financi\u00e8re",
+      "texte_remplacement": "Ventes : 21 en 2025, 28,5 en 2026."
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "docx graphique refuse : trop de categories",
+   "demande": {
+    "format": "docx",
+    "modele": "sobre",
+    "titre": "Rapport",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "graphique",
+      "genre": "colonnes",
+      "titre": "Ventes par ann\u00e9e",
+      "categories": [
+       "0",
+       "1",
+       "2",
+       "3",
+       "4",
+       "5",
+       "6",
+       "7",
+       "8",
+       "9",
+       "10",
+       "11",
+       "12",
+       "13",
+       "14",
+       "15",
+       "16",
+       "17",
+       "18",
+       "19",
+       "20",
+       "21",
+       "22",
+       "23",
+       "24",
+       "25",
+       "26",
+       "27",
+       "28",
+       "29",
+       "30",
+       "31",
+       "32",
+       "33",
+       "34",
+       "35",
+       "36",
+       "37",
+       "38",
+       "39",
+       "40",
+       "41",
+       "42",
+       "43",
+       "44",
+       "45",
+       "46",
+       "47",
+       "48",
+       "49",
+       "50"
+      ],
+      "series": [
+       {
+        "nom": "V",
+        "valeurs": [
+         0,
+         1,
+         2,
+         3,
+         4,
+         5,
+         6,
+         7,
+         8,
+         9,
+         10,
+         11,
+         12,
+         13,
+         14,
+         15,
+         16,
+         17,
+         18,
+         19,
+         20,
+         21,
+         22,
+         23,
+         24,
+         25,
+         26,
+         27,
+         28,
+         29,
+         30,
+         31,
+         32,
+         33,
+         34,
+         35,
+         36,
+         37,
+         38,
+         39,
+         40,
+         41,
+         42,
+         43,
+         44,
+         45,
+         46,
+         47,
+         48,
+         49,
+         50
+        ]
+       }
+      ],
+      "source": "Direction financi\u00e8re",
+      "texte_remplacement": "Ventes : 21 en 2025, 28,5 en 2026."
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "docx graphique refuse : aucune categorie",
+   "demande": {
+    "format": "docx",
+    "modele": "sobre",
+    "titre": "Rapport",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "graphique",
+      "genre": "colonnes",
+      "titre": "Ventes par ann\u00e9e",
+      "categories": [],
+      "series": [
+       {
+        "nom": "V",
+        "valeurs": []
+       }
+      ],
+      "source": "Direction financi\u00e8re",
+      "texte_remplacement": "Ventes : 21 en 2025, 28,5 en 2026."
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "docx graphique refuse : titre trop long",
+   "demande": {
+    "format": "docx",
+    "modele": "sobre",
+    "titre": "Rapport",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "graphique",
+      "genre": "colonnes",
+      "titre": "ttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt",
+      "categories": [
+       "2025",
+       "2026"
+      ],
+      "series": [
+       {
+        "nom": "Ventes",
+        "valeurs": [
+         21,
+         28.5
+        ]
+       }
+      ],
+      "source": "Direction financi\u00e8re",
+      "texte_remplacement": "Ventes : 21 en 2025, 28,5 en 2026."
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "docx graphique refuse : source trop longue",
+   "demande": {
+    "format": "docx",
+    "modele": "sobre",
+    "titre": "Rapport",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "graphique",
+      "genre": "colonnes",
+      "titre": "Ventes par ann\u00e9e",
+      "categories": [
+       "2025",
+       "2026"
+      ],
+      "series": [
+       {
+        "nom": "Ventes",
+        "valeurs": [
+         21,
+         28.5
+        ]
+       }
+      ],
+      "source": "sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+      "texte_remplacement": "Ventes : 21 en 2025, 28,5 en 2026."
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "docx graphique refuse : texte de remplacement trop long",
+   "demande": {
+    "format": "docx",
+    "modele": "sobre",
+    "titre": "Rapport",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "graphique",
+      "genre": "colonnes",
+      "titre": "Ventes par ann\u00e9e",
+      "categories": [
+       "2025",
+       "2026"
+      ],
+      "series": [
+       {
+        "nom": "Ventes",
+        "valeurs": [
+         21,
+         28.5
+        ]
+       }
+      ],
+      "source": "Direction financi\u00e8re",
+      "texte_remplacement": "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr"
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "docx graphique refuse : categorie en formule",
+   "demande": {
+    "format": "docx",
+    "modele": "sobre",
+    "titre": "Rapport",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "graphique",
+      "genre": "colonnes",
+      "titre": "Ventes par ann\u00e9e",
+      "categories": [
+       "2025",
+       "=WEBSERVICE(\"http://exemple.invalid\")"
+      ],
+      "series": [
+       {
+        "nom": "Ventes",
+        "valeurs": [
+         21,
+         28.5
+        ]
+       }
+      ],
+      "source": "Direction financi\u00e8re",
+      "texte_remplacement": "Ventes : 21 en 2025, 28,5 en 2026."
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "docx graphique refuse : nom de serie en formule",
+   "demande": {
+    "format": "docx",
+    "modele": "sobre",
+    "titre": "Rapport",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "graphique",
+      "genre": "colonnes",
+      "titre": "Ventes par ann\u00e9e",
+      "categories": [
+       "2025",
+       "2026"
+      ],
+      "series": [
+       {
+        "nom": "=HYPERLINK(\"http://exemple.invalid\")",
+        "valeurs": [
+         1,
+         2
+        ]
+       }
+      ],
+      "source": "Direction financi\u00e8re",
+      "texte_remplacement": "Ventes : 21 en 2025, 28,5 en 2026."
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "docx graphique refuse : nom de serie avec DDE",
+   "demande": {
+    "format": "docx",
+    "modele": "sobre",
+    "titre": "Rapport",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "graphique",
+      "genre": "colonnes",
+      "titre": "Ventes par ann\u00e9e",
+      "categories": [
+       "2025",
+       "2026"
+      ],
+      "series": [
+       {
+        "nom": "@SUM(A1)",
+        "valeurs": [
+         1,
+         2
+        ]
+       }
+      ],
+      "source": "Direction financi\u00e8re",
+      "texte_remplacement": "Ventes : 21 en 2025, 28,5 en 2026."
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "docx graphique refuse : champ inconnu",
+   "demande": {
+    "format": "docx",
+    "modele": "sobre",
+    "titre": "Rapport",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "graphique",
+      "genre": "colonnes",
+      "titre": "Ventes par ann\u00e9e",
+      "categories": [
+       "2025",
+       "2026"
+      ],
+      "series": [
+       {
+        "nom": "Ventes",
+        "valeurs": [
+         21,
+         28.5
+        ]
+       }
+      ],
+      "source": "Direction financi\u00e8re",
+      "texte_remplacement": "Ventes : 21 en 2025, 28,5 en 2026.",
+      "couleur": "#ff0000"
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "xlsx graphique refuse",
+   "demande": {
+    "format": "xlsx",
+    "modele": "sobre",
+    "titre": "Rapport",
+    "langue": "fr-BE",
+    "blocs": [
+     {
+      "type": "graphique",
+      "genre": "colonnes",
+      "titre": "Ventes par ann\u00e9e",
+      "categories": [
+       "2025",
+       "2026"
+      ],
+      "series": [
+       {
+        "nom": "Ventes",
+        "valeurs": [
+         21,
+         28.5
+        ]
+       }
+      ],
+      "source": "Direction financi\u00e8re",
+      "texte_remplacement": "Ventes : 21 en 2025, 28,5 en 2026."
+     }
+    ],
+    "feuilles": [
+     {
+      "nom": "F",
+      "lignes": []
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "xlsx formule deguisee refusee : +a1",
+   "demande": {
+    "format": "xlsx",
+    "modele": "sobre",
+    "titre": "Budget",
+    "langue": "fr-BE",
+    "feuilles": [
+     {
+      "nom": "F",
+      "lignes": [
+       [
+        {
+         "type": "texte",
+         "valeur": "+a1"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "xlsx formule deguisee refusee : -(A1+B1)",
+   "demande": {
+    "format": "xlsx",
+    "modele": "sobre",
+    "titre": "Budget",
+    "langue": "fr-BE",
+    "feuilles": [
+     {
+      "nom": "F",
+      "lignes": [
+       [
+        {
+         "type": "texte",
+         "valeur": "-(A1+B1)"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "xlsx formule deguisee refusee : +SUM (A1)",
+   "demande": {
+    "format": "xlsx",
+    "modele": "sobre",
+    "titre": "Budget",
+    "langue": "fr-BE",
+    "feuilles": [
+     {
+      "nom": "F",
+      "lignes": [
+       [
+        {
+         "type": "texte",
+         "valeur": "+SUM (A1)"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "xlsx formule deguisee refusee : +2+5+cmd|' /C calc'!A0",
+   "demande": {
+    "format": "xlsx",
+    "modele": "sobre",
+    "titre": "Budget",
+    "langue": "fr-BE",
+    "feuilles": [
+     {
+      "nom": "F",
+      "lignes": [
+       [
+        {
+         "type": "texte",
+         "valeur": "+2+5+cmd|' /C calc'!A0"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "xlsx formule deguisee refusee : -(1+2)",
+   "demande": {
+    "format": "xlsx",
+    "modele": "sobre",
+    "titre": "Budget",
+    "langue": "fr-BE",
+    "feuilles": [
+     {
+      "nom": "F",
+      "lignes": [
+       [
+        {
+         "type": "texte",
+         "valeur": "-(1+2)"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "xlsx texte qui reste du texte : -Q1 : marge 12 %",
+   "demande": {
+    "format": "xlsx",
+    "modele": "sobre",
+    "titre": "Budget",
+    "langue": "fr-BE",
+    "feuilles": [
+     {
+      "nom": "F",
+      "lignes": [
+       [
+        {
+         "type": "texte",
+         "valeur": "-Q1 : marge 12 %"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "valide": true
+  },
+  {
+   "nom": "xlsx texte qui reste du texte : - E40 : travaux",
+   "demande": {
+    "format": "xlsx",
+    "modele": "sobre",
+    "titre": "Budget",
+    "langue": "fr-BE",
+    "feuilles": [
+     {
+      "nom": "F",
+      "lignes": [
+       [
+        {
+         "type": "texte",
+         "valeur": "- E40 : travaux"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "valide": true
+  },
+  {
+   "nom": "xlsx texte qui reste du texte : @bob1",
+   "demande": {
+    "format": "xlsx",
+    "modele": "sobre",
+    "titre": "Budget",
+    "langue": "fr-BE",
+    "feuilles": [
+     {
+      "nom": "F",
+      "lignes": [
+       [
+        {
+         "type": "texte",
+         "valeur": "@bob1"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "valide": true
+  },
+  {
+   "nom": "xlsx texte qui reste du texte : - Marge (brute)",
+   "demande": {
+    "format": "xlsx",
+    "modele": "sobre",
+    "titre": "Budget",
+    "langue": "fr-BE",
+    "feuilles": [
+     {
+      "nom": "F",
+      "lignes": [
+       [
+        {
+         "type": "texte",
+         "valeur": "- Marge (brute)"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "valide": true
+  },
+  {
+   "nom": "xlsx texte qui reste du texte : - (voir note)",
+   "demande": {
+    "format": "xlsx",
+    "modele": "sobre",
+    "titre": "Budget",
+    "langue": "fr-BE",
+    "feuilles": [
+     {
+      "nom": "F",
+      "lignes": [
+       [
+        {
+         "type": "texte",
+         "valeur": "- (voir note)"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "valide": true
+  },
+  {
+   "nom": "xlsx texte qui reste du texte : + 3 clients",
+   "demande": {
+    "format": "xlsx",
+    "modele": "sobre",
+    "titre": "Budget",
+    "langue": "fr-BE",
+    "feuilles": [
+     {
+      "nom": "F",
+      "lignes": [
+       [
+        {
+         "type": "texte",
+         "valeur": "+ 3 clients"
+        }
+       ]
+      ]
+     }
+    ]
+   },
+   "valide": true
+  },
+  {
+   "nom": "xlsx texte qui reste du texte : -Marge (brute)",
+   "demande": {
+    "format": "xlsx",
+    "modele": "sobre",
+    "titre": "Budget",
+    "langue": "fr-BE",
+    "feuilles": [
+     {
+      "nom": "F",
+      "lignes": [
+       [
+        {
+         "type": "texte",
+         "valeur": "-Marge (brute)"
+        }
+       ]
+      ]
      }
     ]
    },

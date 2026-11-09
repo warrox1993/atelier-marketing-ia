@@ -19,6 +19,10 @@ export const GABARIT = chargerGabarit("wf-01-prospection");
 export const EXPORT_CRM = { service: "crm", canal: "courriel", entite: "entite-1" };
 export const ENTREES = { brief: "brief", cibles: "cibles", exportCrm: EXPORT_CRM };
 export const h = (n: number) => n.toString(16).padStart(64, "0");
+/** Source déposée par la tâche du rang 2 : celle que portent les prospects de la mission. */
+export const SOURCE_COLLECTE = "00000000-0000-4000-8000-0000000000a1";
+/** Autre dépôt : ses prospects ne sont pas ceux de la mission. */
+export const SOURCE_AUTRE = "00000000-0000-4000-8000-0000000000a2";
 
 export function prospect(n: number): Prospect {
   return {
@@ -29,7 +33,7 @@ export function prospect(n: number): Prospect {
     zone: { codePostal: "4000", commune: "Liège", province: "Liège", region: "Wallonie", pays: "BE" },
     coordonnees: [{ canal: "courriel", valeur: chiffrer(`contact${n}@exemple.invalid`, CLES_TEST.chiffrement), empreinte: h(n), nature: "impersonnelle" }],
     empreintes: [{ type: "courriel", valeur: h(n) }],
-    sources: [{ type: "import", sourceId: null, service: null, outil: null, url: null, collecteLe: T }],
+    sources: [{ type: "import", sourceId: null, service: null, outil: null, url: null, collecteLe: T }, { type: "depot_signe", sourceId: SOURCE_COLLECTE, service: "bce", outil: "bce_recherche", url: null, collecteLe: T }],
     mode: "reel", statut: "nouveau", motifsExclusion: [], score: null, basesLegales: [], particulier: null, creeLe: T, modifieLe: T,
   };
 }
@@ -163,16 +167,22 @@ export const porte = {
   async resolveur() { return <T>(v: T) => v; },
 };
 
-export interface OptionsBanc { entrees?: Record<string, unknown>; oppositions?: Empreinte[]; sansEtapesCode?: boolean; zone?: ZoneChoisie; crm?: CrmMoteur }
+export interface OptionsBanc { entrees?: Record<string, unknown>; oppositions?: Empreinte[]; sansEtapesCode?: boolean; zone?: ZoneChoisie; crm?: CrmMoteur; collecte?: string[]; prospects?: Prospect[]; sourcesEnPanne?: boolean }
 
 export async function monter(opts: OptionsBanc = {}) {
   const m = baseMemoire();
   const h2 = hoteDouble();
   const crm = creerCrmDouble();
   const docs = new Map<string, string>();
-  const lireProspects = async (_c: string, ids: string[]) => ids.flatMap((id) => [...P, PHZ].filter((p) => p.id === id));
+  const lireProspects = async (_c: string, ids: string[]) => ids.flatMap((id) => [...P, PHZ, ...(opts.prospects ?? [])].filter((p) => p.id === id));
+  // Comme la vraie base : les sources de la tâche du rang 2 de CETTE mission, de CETTE entreprise ; sans tâche au rang 2, aucune.
+  const sourcesCollecte = async (companyId: string, missionId: string) => {
+    if (opts.sourcesEnPanne) throw new Error("base indisponible");
+    const tache = (await m.base.lireEtapes(companyId, missionId)).find((e) => e.rang === 2 && e.tentative === 1)?.issueId;
+    return tache ? (opts.collecte ?? [SOURCE_COLLECTE]) : [];
+  };
   const contexteExclusions = async () => ({ contexte: { maintenant: T, modeCampagne: "reel" as const, canaux: [], zone: opts.zone ?? null, clientsActuels: [] }, oppositions: opts.oppositions ?? [] });
-  const etapesCode = creerEtapesWf01({ lireProspects, contexteExclusions, deps: { crm: opts.crm ?? crm, base: m.base as never } });
+  const etapesCode = creerEtapesWf01({ lireProspects, sourcesCollecte, contexteExclusions, deps: { crm: opts.crm ?? crm, base: m.base as never } });
   // Comme l'hôte : la politique posée est écrite sur la tâche, chaque étape reçoit un identifiant.
   const porteDouble = {
     ...porte,
