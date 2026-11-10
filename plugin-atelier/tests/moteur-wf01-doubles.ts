@@ -106,6 +106,13 @@ export function baseMemoire() {
     async lireExecution(companyId: string, cle: string) {
       return executions.get(`${companyId}|${cle}`) ?? null;
     },
+    /** Comme le SQL : exécutions `appliquee` de la mission, clé commençant par `prefixe` et finissant par `suffixe` (vide : sans suffixe de cycle). */
+    async compterExecutionsAppliquees(companyId: string, missionId: string, prefixe: string, suffixe: string) {
+      return [...executions].filter(([k, x]) => {
+        const cle = k.slice(k.indexOf("|") + 1);
+        return k.startsWith(`${companyId}|`) && x.missionId === missionId && x.statut === "appliquee" && cle.startsWith(prefixe) && (suffixe ? cle.endsWith(suffixe) : !/:c[0-9]+$/.test(cle));
+      }).length;
+    },
     async journaliser(e: { type: string; donnees?: Record<string, unknown> }) {
       journal.push({ type: e.type, donnees: e.donnees });
     },

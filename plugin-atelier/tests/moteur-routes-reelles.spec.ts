@@ -264,6 +264,26 @@ describe("export CRM de production de WF-01 par la vraie route", () => {
     expect(await m.crm.existe(SOC, MISSION_WF01, P1)).toBe(false);
     await m.passe([P1, P2]);
     expect(m.executions.size).toBe(1);
+    expect(m.banc.t.journal.filter((j) => j.type === "prospects.export_en_attente")).toHaveLength(0);
+  });
+
+  it("attente vue du moteur : aucune ligne prospects.export_en_attente, une seule moteur.export_en_attente (#62)", async () => {
+    const m = monterExport();
+    const t = await jusquAutorisation({ crm: crmReelPourExecuteur(m), lot: [P1, P2] });
+    t.approuver();
+    await t.executeur.surDoneNatif(SOC_WF01, t.issue);
+    for (let i = 0; i < 3; i++) await t.executeur.reprendre(SOC_WF01);
+    expect(m.banc.t.journal.filter((j) => j.type === "prospects.export_en_attente")).toHaveLength(0);
+    expect(t.journal.filter((j) => j.type === "moteur.export_en_attente")).toHaveLength(1);
+  });
+
+  it("agent qui demande deux fois l'export sans décision : une ligne par demande (#62)", async () => {
+    const m = monterExport();
+    const corps = { prospectIds: [P1], service: "crm", canal: "courriel", entite: "entite-1", cleIdempotence: "cle-de-l-agent" };
+    const agent = { type: "agent" as const, id: "agent-x", agentId: "agent-x", userId: null, runId: "run-x" };
+    for (let i = 0; i < 2; i++) {
+      expect((await m.services.routes["tache.prospects.exporter"]!({ cle: "tache.prospects.exporter", params: { issueId: ISSUE }, query: {}, companyId: SOC, acteur: agent, corps })).statut).toBe(202);
+    }
     expect(m.banc.t.journal.filter((j) => j.type === "prospects.export_en_attente")).toHaveLength(2);
   });
 

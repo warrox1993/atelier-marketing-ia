@@ -77,6 +77,25 @@ describe("section « Fichiers de mission »", () => {
     expect(c.textContent).toContain("Télécharger le fichier Excel");
   });
 
+  it("20 fichiers : la phrase sur les plus récents s'affiche, 19 : non (#62)", async () => {
+    const lot = (n: number) => Array.from({ length: n }, (_, i) => ({ ...FICHIER, missionId: `mission-${i}-0000-4000-8000-000000000000` }));
+    fichiers = lot(19);
+    const c19 = await ouvrir();
+    expect(c19.textContent).not.toContain("20 fichiers les plus récents");
+    rendu?.demonter();
+    rendu = null;
+    fichiers = lot(20);
+    const c20 = await ouvrir();
+    expect(c20.textContent).toContain("20 fichiers les plus récents");
+  });
+
+  it("chaque ligne porte la référence courte de sa mission (#62)", async () => {
+    fichiers = [{ ...FICHIER, missionId: "abcdef12-3456-4789-8abc-def012345678" }];
+    const c = await ouvrir();
+    expect(c.textContent).toContain("mission abcdef12");
+    expect(c.textContent).not.toContain("abcdef12-3456");
+  });
+
   it("le bouton appelle l'export avec le lot exact de la mission, télécharge puis affiche le rapport", async () => {
     fichiers = [FICHIER];
     const cliques: Array<{ nom: string }> = [];

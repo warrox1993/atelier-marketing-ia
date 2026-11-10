@@ -534,10 +534,13 @@ export function routesBaseClients(d: DependancesProspection, o: OutilsProspectio
       // Une décision ne sert qu'à une diffusion : déjà utilisée pour ce CRM, ce compte et cette action, elle vaut décision absente (sinon la diffusion refusée serait mémorisée sur la clé du lot).
       const consommee = Boolean(decision && portee) && (await base.listerDiffusions(r.companyId, issue.id)).some((x) => x.decisionId === decision!.id && x.etat !== "refusee" && x.cleIdempotence !== `export:${entree.cleIdempotence}`.slice(0, 200) && x.action === "modifier_crm" && x.canal === entree.service && (x.compte ?? null) === compte);
       if (!portee || portee.action !== "modifier_crm" || portee.canal !== entree.service || consommee) {
-        await base.journaliser({
-          companyId: r.companyId, type: "prospects.export_en_attente", entite: "tache", entiteId: issue.id, issueId: issue.id, runId: r.acteur.runId, acteur: r.acteur.id,
-          donnees: { service: entree.service, canal: entree.canal, prospects: prospects.length, appelId: appel.id, empreinte: controle.empreinte },
-        });
+        // Le moteur journalise lui-même son attente, une fois par appel (`moteur.export_en_attente`) ; un agent ou un humain garde sa ligne à chaque demande.
+        if (r.acteur.type !== "systeme") {
+          await base.journaliser({
+            companyId: r.companyId, type: "prospects.export_en_attente", entite: "tache", entiteId: issue.id, issueId: issue.id, runId: r.acteur.runId, acteur: r.acteur.id,
+            donnees: { service: entree.service, canal: entree.canal, prospects: prospects.length, appelId: appel.id, empreinte: controle.empreinte },
+          });
+        }
         return {
           statut: 202,
           corps: {

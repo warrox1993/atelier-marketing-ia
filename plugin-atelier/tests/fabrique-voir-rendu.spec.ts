@@ -16,6 +16,7 @@ const ENTREPRISE_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const ENTREPRISE_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const RELECTEUR = "11111111-1111-4111-8111-111111111111";
 const AUTRE_AGENT = "22222222-2222-4222-8222-222222222222";
+const PRODUCTEUR = "77777777-7777-4777-8777-777777777777";
 const RUN = "55555555-5555-4555-8555-555555555555";
 const TACHE = "33333333-3333-4333-8333-333333333333";
 const T = "44444444-4444-4444-8444-444444444444";
@@ -26,13 +27,15 @@ describe("voir_rendu", () => {
   let racine: string;
   let rendus: string;
   let config: Record<string, unknown>;
+  let rendusProducteur: string;
   let relecteurs: string[];
+  let inconnus: string[];
   let appelsPorte: Array<[string, string]>;
   const png = Buffer.concat([SIGNATURE_PNG, Buffer.from("contenu de l'image")]);
 
   const fabrique = () => {
     const deps: DependancesFabrique = {
-      agentConnu: async () => true,
+      agentConnu: async (agent) => !inconnus.includes(agent),
       config: async () => config,
       etatLire: async () => null,
       etatEcrire: async () => undefined,
@@ -63,8 +66,16 @@ describe("voir_rendu", () => {
     rendus = join(racine, "claude-config", "rendus");
     mkdirSync(join(racine, "claude-config"));
     mkdirSync(rendus);
-    config = { fabriqueDossierFile: racine, fabriqueDossiersRendus: { [RELECTEUR]: rendus } };
+    rendusProducteur = join(racine, "claude-config", "rendus-producteur");
+    mkdirSync(rendusProducteur);
+    config = {
+      fabriqueDossierFile: racine,
+      fabriqueDossiersRendus: { [RELECTEUR]: rendus, [PRODUCTEUR]: rendusProducteur },
+      fabriqueAgentsImage: [PRODUCTEUR],
+      fabriqueAgentsVideo: [PRODUCTEUR],
+    };
     relecteurs = [RELECTEUR];
+    inconnus = [];
     appelsPorte = [];
   });
   afterEach(() => rmSync(racine, { recursive: true, force: true }));
@@ -181,6 +192,67 @@ describe("voir_rendu", () => {
     expect(existsSync(rendus)).toBe(false);
     expect((await fabrique().voirRendu({ travail: T }, run())).error).toBeUndefined();
     expect(readdirSync(rendus)).toEqual([`${T}.png`]);
+  });
+  describe("auteur du travail (image ou vidéo)", () => {
+    const etatAuteur = (extra: Record<string, unknown> = {}) => ({ etat: "termine", tache: TACHE, type: "image", agent: PRODUCTEUR, ...extra });
+    const livrerPour = (etat: Record<string, unknown>) => {
+      poser("image.png", png);
+      livrer({ fichier: "image.png", sha256: empreinte(png) }, etat);
+    };
+    const refuse = async (agent = PRODUCTEUR, entreprise = ENTREPRISE_A) => {
+      const r = await fabrique().voirRendu({ travail: T }, run(entreprise, agent));
+      expect(r.error).toContain("Refusé");
+      expect(r.data).toBeUndefined();
+      expect(readdirSync(rendusProducteur)).toEqual([]);
+      expect(readdirSync(rendus)).toEqual([]);
+    };
+
+    it("l'auteur d'une image la voit sans être relecteur : copie dans son dossier de rendus", async () => {
+      livrerPour(etatAuteur());
+      const r = await fabrique().voirRendu({ travail: T }, run(ENTREPRISE_A, PRODUCTEUR));
+      expect(r.error).toBeUndefined();
+      expect((r.data as { chemin: string }).chemin).toBe(join(rendusProducteur, `${T}.png`));
+      expect(readFileSync(join(rendusProducteur, `${T}.png`))).toEqual(png);
+      expect(readdirSync(rendus)).toEqual([]);
+    });
+    it("l'auteur d'une vidéo voit sa planche", async () => {
+      poser("planche.png", png);
+      livrer({ fichier: "planche.png", sha256: empreinte(png) }, etatAuteur({ type: "video" }));
+      const r = await fabrique().voirRendu({ travail: T }, run(ENTREPRISE_A, PRODUCTEUR));
+      expect(r.error).toBeUndefined();
+      expect(readdirSync(rendusProducteur)).toEqual([`${T}.png`]);
+    });
+    it("refuse l'auteur quand etat.json ne nomme pas d'agent (travail d'avant le déploiement)", async () => {
+      livrerPour({ etat: "termine", tache: TACHE, type: "image" });
+      await refuse();
+    });
+    it("refuse un autre producteur retenu qui n'est pas l'auteur du travail", async () => {
+      config = { ...config, fabriqueAgentsImage: [PRODUCTEUR, AUTRE_AGENT] };
+      livrerPour(etatAuteur());
+      await refuse(AUTRE_AGENT);
+    });
+    it("refuse l'auteur d'un document : le droit de l'auteur ne vaut que pour une image ou une vidéo", async () => {
+      livrerPour(etatAuteur({ type: "document" }));
+      await refuse();
+    });
+    it("refuse l'auteur absent de fabriqueAgentsImage (rôle non retenu), même avec un dossier de rendus", async () => {
+      config = { ...config, fabriqueAgentsImage: [], fabriqueAgentsVideo: [] };
+      livrerPour(etatAuteur());
+      await refuse();
+    });
+    it("refuse l'auteur que agentConnu ne connaît pas dans l'entreprise", async () => {
+      inconnus = [PRODUCTEUR];
+      livrerPour(etatAuteur());
+      await refuse();
+    });
+    it("travail d'une autre entreprise : l'auteur reçoit le même message qu'un travail inexistant", async () => {
+      livrerPour(etatAuteur());
+      const autre = await fabrique().voirRendu({ travail: T }, run(ENTREPRISE_B, PRODUCTEUR));
+      const inexistant = await fabrique().voirRendu({ travail: "66666666-6666-4666-8666-666666666666" }, run(ENTREPRISE_A, PRODUCTEUR));
+      expect(autre.error).toBe("Travail introuvable.");
+      expect(inexistant.error).toBe(autre.error);
+      expect(readdirSync(rendusProducteur)).toEqual([]);
+    });
   });
   it("outil déclaré au manifeste avec un schéma fermé", () => {
     expect((manifest.tools ?? []).map((o) => o.name)).toContain("voir_rendu");

@@ -148,6 +148,35 @@ export function creerBase(db: Db) {
     return rangs.map((r) => ({ issueId: String(r.issue_id), le: iso(r.le) }));
   }
 
+  /**
+   * #78 : renvois au Coordinateur différés (parente en attente de l'humain) dont aucune demande ni clôture (redispatch_differe_clos) de même clé n'a suivi,
+   * tâche non close, les plus récents d'abord.
+   * shortcut: reprise limitée à 30 jours et 20 tâches par passe, à élargir si un différé plus ancien reste sans suite.
+   */
+  async function differesSansDemande(companyId: string) {
+    const rangs = await q(
+      `select d.issue_id, d.donnees->>'cle' as cle from ${ns}.journal d join public.issues i on i.id = d.issue_id
+       where d.company_id = $1 and d.type = 'coordinateur.redispatch_differe' and d.cree_le > now() - interval '30 days' and i.status not in ('done', 'cancelled')
+       and not exists (select 1 from ${ns}.journal r where r.company_id = $1 and r.issue_id = d.issue_id and r.type = 'coordinateur.redispatch_demande' and r.donnees->>'cle' = d.donnees->>'cle')
+       and not exists (select 1 from ${ns}.journal r where r.company_id = $1 and r.issue_id = d.issue_id and r.type = 'coordinateur.redispatch_differe_clos' and r.donnees->>'cle' = d.donnees->>'cle')
+       group by d.issue_id, d.donnees->>'cle' order by max(d.cree_le) desc limit 20`,
+      [companyId],
+    );
+    return rangs.map((r) => ({ issueId: String(r.issue_id), cle: String(r.cle) }));
+  }
+
+  /** #78 : demandes de renvoi dont le réveil du Coordinateur a échoué et qui n'ont pas encore eu leur unique nouvel essai (mêmes bornes). */
+  async function reveilsRedispatchRates(companyId: string) {
+    const rangs = await q(
+      `select d.issue_id, d.donnees->>'cle' as cle, max(d.donnees->>'parentId') as parent_id from ${ns}.journal d join public.issues i on i.id = d.issue_id
+       where d.company_id = $1 and d.type = 'coordinateur.redispatch_demande' and d.donnees->>'erreurReveil' is not null and d.cree_le > now() - interval '30 days' and i.status not in ('done', 'cancelled')
+       and not exists (select 1 from ${ns}.journal r where r.company_id = $1 and r.issue_id = d.issue_id and r.type = 'coordinateur.redispatch_relance' and r.donnees->>'cle' = d.donnees->>'cle')
+       group by d.issue_id, d.donnees->>'cle' order by max(d.cree_le) desc limit 20`,
+      [companyId],
+    );
+    return rangs.map((r) => ({ issueId: String(r.issue_id), cle: String(r.cle), parentId: String(r.parent_id) }));
+  }
+
   /** Vrai si une entrée de journal de ce type existe déjà pour cette entité (dédoublonnage des relais automatiques). */
   async function journalExiste(companyId: string, type: string, entiteId: string) {
     return (await q(`select 1 as un from ${ns}.journal where company_id = $1 and type = $2 and entite_id = $3 limit 1`, [companyId, type, entiteId])).length > 0;
@@ -1919,6 +1948,16 @@ export function creerBase(db: Db) {
     return r ? { statut: String(r.statut) as StatutExecution } : null;
   }
 
+  /** Nombre d'exécutions `appliquee` de cette mission dont la clé commence par `prefixe` et finit par `suffixe` (vide : clé sans suffixe de cycle `:c<n>`). */
+  async function compterExecutionsAppliquees(companyId: string, missionId: string, prefixe: string, suffixe: string) {
+    const [r] = await q(
+      `select count(*)::int as n from ${ns}.executions where company_id = $1 and mission_id = $2 and statut = 'appliquee' and left(cle_idempotence, length($3)) = $3
+         and (($4 <> '' and right(cle_idempotence, length($4)) = $4) or ($4 = '' and cle_idempotence !~ ':c[0-9]+$'))`,
+      [companyId, missionId, prefixe, suffixe],
+    );
+    return Number(r?.n ?? 0);
+  }
+
   /** Exécutions encore `demandee` de cette mission pour ce type (clé d'idempotence et requête) : ce qu'une reprise doit rejouer. */
   async function executionsDemandees(companyId: string, missionId: string, type: TypeExecution) {
     const lignes = await q(`select cle_idempotence, requete from ${ns}.executions where company_id = $1 and mission_id = $2 and type = $3 and statut = 'demandee' order by cree_le`, [companyId, missionId, type]);
@@ -1983,7 +2022,7 @@ export function creerBase(db: Db) {
 
   return {
     ns,
-    journaliser, lireJournal, datesJournal, diffusionsConfirmeesSansBilan, abandonsVeilleur, journalExiste, journalExistants, lectureWebDansRun, derniereDateJournal, entreprisesSuivies, tachesOrphelines, tachesFigeesSousPorte,
+    journaliser, lireJournal, datesJournal, diffusionsConfirmeesSansBilan, abandonsVeilleur, differesSansDemande, reveilsRedispatchRates, journalExiste, journalExistants, lectureWebDansRun, derniereDateJournal, entreprisesSuivies, tachesOrphelines, tachesFigeesSousPorte,
     lireReglages, enregistrerReglages, lireTemoinCleEmpreintes, adopterTemoinCleEmpreintes, entrepriseAOppositions, remplacerTemoinCleEmpreintes, enregistrerPlafondEntreprise, enregistrerPlafondCampagne, donneesEngagement,
     creerCampagne, listerCampagnes, lireCampagne, creerBrief, dernierBrief,
     enregistrerExigence, creerExigenceSiAbsente, listerExigences, lireExigence, changerExclusion,
@@ -2003,7 +2042,7 @@ export function creerBase(db: Db) {
     detailsProspects, listerProspects, insererOpposition, lireOpposition,
     insererImportBaseClients, insererClients, etatBaseClients, supprimerBaseClients, reglesVentesCroisees, clientsPourVentesCroisees, insererEtalonnage, issuesPourEtalonnage, scoresCourantsCible, insererScoreMesure,
     lireExportCrmParCle, prospectDansExportNonRefuse, prospectExportConfirme, prospectExportAmbigu, insererExportCrm,
-    creerMission, lireMission, missionsActives, rattacherCampagneMission, changerEtatMission, creerEtape, lireEtapes, missionsAvecFichier, majEtape, enregistrerExecution, marquerExecution, lireExecution, executionsDemandees, changerRangMission, etapeParIssue,
+    creerMission, lireMission, missionsActives, rattacherCampagneMission, changerEtatMission, creerEtape, lireEtapes, missionsAvecFichier, majEtape, enregistrerExecution, marquerExecution, lireExecution, compterExecutionsAppliquees, executionsDemandees, changerRangMission, etapeParIssue,
   };
 }
 

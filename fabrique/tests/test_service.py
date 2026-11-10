@@ -353,6 +353,23 @@ def test_etat_ignore_une_tache_douteuse(racine, tache):
     assert "tache" not in etat and etat["etat"] == "termine"
 
 
+AGENT_UUID = "11111111-1111-4111-8111-111111111111"
+
+
+def test_etat_copie_l_agent_du_fichier_de_file(racine):
+    ident, _ = deposer(racine / "entrant", agent=AGENT_UUID)
+    service.traiter_une_entree(racine, UID, f"{ident}.json", lire=lambda: 10**12)
+    etat = json.loads((racine / "livrables" / "acme" / ident / "etat.json").read_text())
+    assert etat["agent"] == AGENT_UUID
+
+
+@pytest.mark.parametrize("agent", ["../x", "a b", "", 5, None, "x" * 65])
+def test_etat_ignore_un_agent_douteux(racine, agent):
+    ident, _ = deposer(racine / "entrant", agent=agent)
+    service.traiter_une_entree(racine, UID, f"{ident}.json", lire=lambda: 10**12)
+    etat = json.loads((racine / "livrables" / "acme" / ident / "etat.json").read_text())
+    assert "agent" not in etat and etat["etat"] == "termine"
+
 # ---------- provenance des documents ----------
 
 def test_provenance_document_au_format_de_la_porte():
@@ -1192,6 +1209,13 @@ def test_image_ordre_des_etapes_provenance_avant_copie_et_livrables(racine, monk
     assert resultat["fichiers"][0]["sha256"] in apercu
     assert not (racine / "travaux" / ident).exists()
 
+
+def test_image_pose_la_revue_sur_l_image_livree(racine, monkeypatch):
+    BancImage(racine, monkeypatch)
+    _, livrable, _ = lancer_image(racine)
+    resultat = json.loads((livrable / "resultat.json").read_text())
+    assert resultat["revue"] == {"fichier": "image.png", "sha256": hashlib.sha256(b"png+xmp").hexdigest()}
+    assert [f["fichier"] for f in resultat["fichiers"]] == ["image.png"]
 
 def test_image_provenance_recoit_les_infos_de_la_fabrique_seule(racine, monkeypatch):
     banc = BancImage(racine, monkeypatch)

@@ -1573,13 +1573,16 @@ export const ApercuBaseClientsEntree = z
   .strict();
 export type ApercuBaseClientsEntree = z.infer<typeof ApercuBaseClientsEntree>;
 
+/** Nombre maximal de prospects d'un export en fichier (route `prospects.exporter-fichier` et lot d'une mission sans CRM). */
+export const exportFichierMax = 5000;
+
 /** Lot P9b : entrée de `prospects.exporter-fichier` (humain) : prospects désignés OU filtres de la liste. */
 export const ExporterFichierProspectsEntree = z
   .object({
     companyId: IdNatif,
     canal: CanalContact,
     format: FormatBaseClients,
-    prospectIds: z.array(IdNatif).min(1).max(5000).optional(),
+    prospectIds: z.array(IdNatif).min(1).max(exportFichierMax).optional(),
     /** Filtres de `prospects.lister` (mêmes noms), sans pagination. */
     filtres: z.record(z.string(), z.unknown()).optional(),
   })

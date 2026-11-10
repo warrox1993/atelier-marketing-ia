@@ -5,6 +5,7 @@
  */
 import type { PluginContext } from "@paperclipai/plugin-sdk";
 import { describe, expect, it } from "vitest";
+import { ROUTES_API } from "../src/contrats/routes.js";
 import { ESPACE_BASE } from "../src/contrats/index.js";
 import { creerAiguillage } from "../src/serveur/atelier.js";
 import { creerBase, type BaseAtelier } from "../src/serveur/base.js";
@@ -39,6 +40,14 @@ function banc(lignes: Rangee[]) {
     } as never) as Promise<{ status: number; body: any }>; // eslint-disable-line @typescript-eslint/no-explicit-any
   return { appeler, appels };
 }
+
+describe("table des routes", () => {
+  it("/missions/fichiers-prospects est déclarée avant /missions/:issueId : l'hôte prend la première route qui correspond (#62)", () => {
+    const chemins: string[] = ROUTES_API.map((r) => r.chemin);
+    expect(chemins.indexOf("/missions/fichiers-prospects")).toBeGreaterThanOrEqual(0);
+    expect(chemins.indexOf("/missions/fichiers-prospects")).toBeLessThan(chemins.indexOf("/missions/:issueId"));
+  });
+});
 
 describe("missions.fichiers-prospects (route)", () => {
   it("identifiants et nombre seulement, jamais de nom ni de coordonnée", async () => {

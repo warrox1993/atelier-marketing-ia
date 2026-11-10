@@ -1134,7 +1134,8 @@ def traiter_image(donnees: dict, dossier_travail: Path, dossier_livrable: Path) 
     chemin_provenance = _poser_provenance_image(resultat.image, infos)
     copie = copier_vers_livrable(resultat.image, dossier_livrable)  # après la provenance : c'est l'image portant le XMP
     copier_vers_livrable(chemin_provenance, dossier_livrable)
-    return {"fichiers": [copie], "apercu": _apercu_image(demande["gabarit"], demande["format"], charte.id, copie, avec_illustration)}
+    return {"fichiers": [copie], "revue": {"fichier": copie["fichier"], "sha256": copie["sha256"]},
+            "apercu": _apercu_image(demande["gabarit"], demande["format"], charte.id, copie, avec_illustration)}
 
 
 # Un traitement rend {"fichiers": [...]} et, facultativement, "apercu" : texte lisible par l'agent
@@ -1195,6 +1196,9 @@ def executer_travail(racine: Path, donnees: dict, reprise: bool = False) -> str 
     etat = {"travail": identifiant, "type": donnees["type"], "debut": debut}
     if _tache_de(donnees):
         etat["tache"] = _tache_de(donnees)  # la porte de diffusion relie ainsi la tâche et le travail
+    agent = donnees.get("agent")
+    if isinstance(agent, str) and MOTIF_ENTREPRISE.fullmatch(agent):
+        etat["agent"] = agent  # voir_rendu reconnaît ainsi l'auteur d'une image ou d'une vidéo
     ecrire_json_atomique(dossier_livrable / "etat.json", {**etat, "etat": "en_cours"})
     journal(f"DEBUT {identifiant} type={donnees['type']} entreprise={donnees['entreprise']}")
     try:

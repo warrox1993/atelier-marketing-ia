@@ -61,6 +61,8 @@ export const LIBELLES_MOTIFS: Readonly<Record<MotifExclusion, string>> = {
 };
 
 const LIBELLES_CANAUX: Readonly<Record<CanalContact, string>> = { courriel: "Courriel", sms: "SMS", telephone: "Téléphone", courrier: "Courrier postal" };
+/** Nombre de fichiers que `missions.fichiers-prospects` rend au plus (les plus récents d'abord). */
+const FICHIERS_MISSION_MAX = 20;
 
 const LIBELLES_BASES: Readonly<Record<BaseLegale, string>> = {
   consentement: "consentement",
@@ -1201,13 +1203,14 @@ function FichiersMission({ companyId }: { companyId: string }) {
       <ul className="atl-liste">
         {fichiers.map((f) => (
           <li key={f.missionId}>
-            {dateSeule(f.date)} : {LIBELLES_CANAUX[f.canal] ?? f.canal}, {nombre(f.nombre)} prospect{f.nombre > 1 ? "s" : ""}{" "}
+            {dateSeule(f.date)} : {LIBELLES_CANAUX[f.canal] ?? f.canal}, {nombre(f.nombre)} prospect{f.nombre > 1 ? "s" : ""}, mission {idCourt(f.missionId)}{" "}
             <Bouton variante="secondaire" enCours={enCours === f.missionId} onClick={() => void telecharger(f)}>
               Télécharger le fichier Excel
             </Bouton>
           </li>
         ))}
       </ul>
+      {fichiers.length >= FICHIERS_MISSION_MAX ? <p className="atl-sous">Seuls les {FICHIERS_MISSION_MAX} fichiers les plus récents sont listés.</p> : null}
       {erreur ? <EtatErreur erreur={erreur} contexte="téléchargement du fichier de mission" /> : null}
       {resultat ? (
         <div role="status" className="atl-formulaire">

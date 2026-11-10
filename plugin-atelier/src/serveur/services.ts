@@ -3199,7 +3199,7 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
   }));
 
   // Toute évaluation insérée se relit : le `!` ne masque rien.
-  return { routes, donnees, actions, evaluerPorte: async (companyId, issueId, par) => (await evaluer(companyId, issueId, par))!, lecturesMoteur: {
+  return { routes, donnees, actions, rejouerRedispatch: redispatch.rejouer, evaluerPorte: async (companyId, issueId, par) => (await evaluer(companyId, issueId, par))!, lecturesMoteur: {
     lireProspectsMoteur: (companyId, ids) => servicesProspection.lireProspectsMoteur!(companyId, ids),
     contexteExclusionsMoteur: (companyId, campagneId, prospects) => servicesProspection.contexteExclusionsMoteur!(companyId, campagneId, prospects),
     modeMoteur: (companyId, campagneId) => servicesProspection.modeMoteur!(companyId, campagneId),

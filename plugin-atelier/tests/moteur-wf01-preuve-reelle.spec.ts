@@ -491,6 +491,51 @@ describe("export CRM réel de WF-01 : l'agent crm-conversion exécute la preuve 
     expect(refus.corps).toMatchObject({ etat: "en_attente_approbation", decisionRefusee: true });
   });
 
+  /** Mission menée jusqu'à la diffusion préparée avec sa tâche d'exécution ouverte (#62). */
+  const jusquALExecution = async () => {
+    const m = monterReel();
+    const t = await missionReelle(m);
+    await t.passes(1);
+    await m.approuver();
+    await t.passes(2);
+    return { m, t, tache: t.tacheDe(t.tachesExecution()[0]!) };
+  };
+
+  it("issue confirmée : tâche d'exécution done à la clôture (#62)", async () => {
+    const { m, t, tache } = await jusquALExecution();
+    expect(tache.status).toBe("todo");
+    await m.deposer(m.banc.t.diffusions[0]!.id as string, "executee");
+    await t.passes(1);
+    expect(t.etat()).toBe("cloturee");
+    expect(tache.status).toBe("done");
+  });
+
+  it("diffusion révoquée ou preuve expirée : tâche d'exécution cancelled, aucun réveil de plus (#62)", async () => {
+    for (const cas of ["revoquee", "expiree"]) {
+      const { m, t, tache } = await jusquALExecution();
+      const reveils = t.reveils.filter((r) => r === tache.id).length;
+      const d = m.banc.t.diffusions[0]!;
+      if (cas === "revoquee") Object.assign(d, { revoqueeLe: m.banc.horloge(), revocationMotif: "Décision remplacée" });
+      else (d.preuveCharge as { expire: number }).expire = 1;
+      await t.passes(3);
+      expect(t.etat()).toBe("blocage");
+      expect(tache.status).toBe("cancelled");
+      expect(t.reveils.filter((r) => r === tache.id)).toHaveLength(reveils);
+    }
+  });
+
+  it("tâche déjà fermée par l'agent : aucune mise à jour de plus (#62)", async () => {
+    const { m, t, tache } = await jusquALExecution();
+    await m.deposer(m.banc.t.diffusions[0]!.id as string, "executee");
+    tache.status = "done";
+    const mises = [] as string[];
+    const maj = t.hote.issues.update;
+    t.hote.issues.update = async (id: string, patch: Record<string, unknown>) => { mises.push(id); return maj(id, patch); };
+    await t.passes(1);
+    expect(t.etat()).toBe("cloturee");
+    expect(mises).not.toContain(tache.id);
+  });
+
   it("tâche d'exécution terminée ou annulée alors que la diffusion reste préparée : blocage execution_crm_sans_issue, ni nouveau réveil ni nouvelle tâche", async () => {
     for (const statut of ["done", "cancelled"]) {
       const m = monterReel();

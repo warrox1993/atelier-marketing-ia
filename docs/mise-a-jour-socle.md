@@ -55,6 +55,29 @@ git -C paperclip rev-parse HEAD                      # à noter : c'est le point
 
 ## 3. Rejouer les patches sur le nouveau tag
 
+### Répéter une montée sans toucher paperclip/
+
+`scripts/repeter-montee-socle.sh` chiffre une montée à l'avance : rapport seul, il ne touche ni `paperclip/` ni `socle/`
+(il les lit). Il clone l'amont dans un dossier sur disque (`~/.cache/atelier-repetition-socle/<cible>` par défaut, jamais
+`/tmp`, qui est en RAM), en empruntant les objets du socle, rejoue `socle/patches/*.patch` dans l'ordre, puis écrit
+`<dossier>/rapport.md` : un tableau `correctif | état | fichiers` (sans conflit, conflit avec ses fichiers, déjà en amont),
+les lignes de sécurité des notes de version et, sur demande, le résultat de la construction.
+
+```bash
+scripts/repeter-montee-socle.sh                      # cible : la plus récente étiquette stable (canary, nightly, -rc écartés)
+scripts/repeter-montee-socle.sh --tag v2026.1106.0   # cible choisie
+# options : --dossier DIR, --garder (conserve le clone), --si-nouvelle (rien si déjà à jour ou déjà répété),
+#           --construire (pnpm install figé et build du socle, puis typecheck du plugin contre le nouveau SDK)
+flock ~/.cache/verification-hooks/suite.lock scripts/repeter-montee-socle.sh --construire   # étape lourde : une suite à la fois
+```
+
+Le script refuse un dossier dans le dépôt, dans le socle ou dans les correctifs, et un espace libre inférieur à
+`REPETITION_ESPACE_MIN_GIO` (20 Gio avec `--construire`, 2 sinon). Il rend 0 quand le rapport est écrit, même avec des conflits.
+Les conflits qui suivent un premier conflit sur un même fichier sont marqués « cascade possible » (le correctif en conflit est
+sauté, les suivants s'appuient sur lui). « 3-way impossible » signale un correctif dont les objets de départ n'existent plus
+(série plus ancienne) : ses fichiers sont ceux du correctif, pas des fichiers fusionnés. Le typecheck du plugin n'a de sens que
+si le rejeu est complet : avec des correctifs sautés, le build du socle casse avant (voir ci-dessous).
+
 Les patches sont des commits locaux (`git format-patch`). Procédure :
 
 ```bash
@@ -129,6 +152,25 @@ restent). Ajouts : tables vocales `chat_voice_*` supprimées avant `chat_endpoin
 `5939d95e1a56c772b3f400d27a7a7aa333da1786`, identique à la branche. Suite serveur (6 workers) : 47 échecs dont 35
 identiques sur le tag nu (environnement : umask 027, git, runner), 11 alignés par `0095`, 1 laissé ouvert
 (`low-trust-red-team-routes`, annulation d'un run qui passe la main sur sa propre tâche, comportement voulu par `0009`).
+
+Répétition vers `v2026.1106.0` (09/11/2026, `scripts/repeter-montee-socle.sh --tag v2026.1106.0`, 47 s, socle actuel
+`v2026.1023.0`, 174 correctifs). Totaux : 60 sans conflit, 113 en conflit, 1 déjà en amont (`0060`).
+- Sans conflit : 0008 0014 0017 0018 0022 0023 0024 0026 0031 0036 0049 0050 0051 0053 0054 0056 0057 0066 0085 0087 0092
+  0094 0095 0097 0100 0101 0102 0103 0104 0105 0106 0109 0115 0117 0118 0121 0122 0123 0124 0125 0129 0130 0140 0141 0142
+  0143 0144 0146 0147 0148 0152 0153 0154 0158 0162 0167 0168 0169 0170 0171.
+- En conflit : les 113 autres (0001 à 0007, 0009 à 0013, 0015, 0016, 0019 à 0021, etc.). 40 avec des fichiers à fusionner
+  nommés par `git am --3way`, 73 en « 3-way impossible » (objets de départ absents), dont 94 marqués « cascade possible ».
+  Fichiers les plus touchés : `ui/src/components/Sidebar.tsx` (14), `ui/src/components/IssueProperties.test.tsx` (11),
+  `ui/src/components/Sidebar.test.tsx` (11), `packages/shared/src/atelier-app-definitions.test.ts` (10),
+  `server/src/__tests__/atelier-marketing-apps.test.ts` (10), `server/src/routes/issues.ts` (9),
+  `packages/shared/src/app-definitions.generated.ts` (8), `ui/src/lib/activity-format.ts` (8). Premier conflit : `0001` sur
+  `server/src/services/heartbeat.ts`.
+- Sécurité : « Notes absentes » (`releases/v2026.1106.0.md` n'existe pas dans l'amont) ; le contenu de sécurité de cette version
+  reste à lire à la source.
+- Construction (`--construire`, première répétition, avant correction de l'affichage des fichiers) : `pnpm install --frozen-lockfile`
+  réussi, `pnpm build` en échec sur `error TS2304: Cannot find name 'existing'` (`server/src/routes/agents.ts`) et
+  `error TS2307: Cannot find module '../atelier/gardes-atelier.js'` : conséquence des 113 correctifs sautés, pas un signal sur le SDK.
+  Typecheck du plugin : non lancé. Un rejeu naïf ordre par ordre ne remplace pas la procédure ci-dessus, qui régénère les patches.
 
 ## 4. Reconstruire, migrer, tester
 

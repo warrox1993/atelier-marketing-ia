@@ -57,6 +57,12 @@ export function creerBanc(o: { mode?: "demonstration" | "reel"; modeEntreprise?:
     remplacerTemoinCleEmpreintes: async (companyId, temoin) => void t.temoinsCle.set(companyId, temoin),
     journaliser: async (e) => void t.journal.push({ ...e, seq: t.journal.length + 1, creeLe: horloge() }),
     journalExiste: async (companyId, type, entiteId) => t.journal.some((j) => j.companyId === companyId && j.type === type && j.entiteId === entiteId),
+    differesSansDemande: async (companyId) =>
+      t.journal.filter((d) => d.companyId === companyId && d.type === "coordinateur.redispatch_differe" && !t.journal.some((r) => r.issueId === d.issueId && (r.type === "coordinateur.redispatch_demande" || r.type === "coordinateur.redispatch_differe_clos") && r.donnees?.cle === d.donnees?.cle))
+        .map((d) => ({ issueId: d.issueId as string, cle: d.donnees?.cle as string })),
+    reveilsRedispatchRates: async (companyId) =>
+      t.journal.filter((d) => d.companyId === companyId && d.type === "coordinateur.redispatch_demande" && d.donnees?.erreurReveil != null && !t.journal.some((r) => r.issueId === d.issueId && r.type === "coordinateur.redispatch_relance" && r.donnees?.cle === d.donnees?.cle))
+        .map((d) => ({ issueId: d.issueId as string, cle: d.donnees?.cle as string, parentId: d.donnees?.parentId as string })),
     datesJournal: async (_c, issueId, type) => t.journal.filter((j) => j.issueId === issueId && j.type === type).map((j) => j.creeLe as string).sort().reverse(),
     depotsProspectionCampagne: async (companyId, campagneId) =>
       t.journal.filter((j) => j.companyId === companyId && j.type === "prospects.deposes" && j.donnees?.campagneId === campagneId).map((j) => depotDepuisJournal(j.issueId ?? null, j.donnees ?? {}, j.creeLe)),

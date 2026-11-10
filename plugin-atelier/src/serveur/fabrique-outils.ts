@@ -786,12 +786,17 @@ export function creerOutilsFabrique(deps: DependancesFabrique) {
     const config = await deps.config(run.companyId);
     const dossier = dossierTravail(dossierFile(config), run.companyId, travail);
     if (!dossier) return erreur("Demande refusée : identifiant invalide.");
-    const etat = (await lireJson(join(dossier, "etat.json"))) as { tache?: unknown } | null;
+    const etat = (await lireJson(join(dossier, "etat.json"))) as { tache?: unknown; agent?: unknown; type?: unknown } | null;
     if (!etat) return erreur("Travail introuvable.");
-    const refusRelecteur = "Refusé : seul le relecteur désigné de la tâche de ce travail peut voir son rendu.";
-    if (typeof etat.tache !== "string" || !deps.relecteursDeTache) return erreur(refusRelecteur);
-    const relecteurs = await deps.relecteursDeTache(etat.tache, run.companyId).catch((): string[] => []);
-    if (!relecteurs.includes(run.agentId)) return erreur(refusRelecteur);
+    const refus = "Refusé : seul le relecteur désigné de la tâche ou l'agent qui a demandé ce travail peut voir son rendu.";
+    const relecteurs =
+      typeof etat.tache === "string" && deps.relecteursDeTache ? await deps.relecteursDeTache(etat.tache, run.companyId).catch((): string[] => []) : [];
+    if (!relecteurs.includes(run.agentId)) {
+      // L'auteur d'une image ou d'une vidéo : agent retenu pour ce type, connu de l'entreprise, nommé dans etat.json par la fabrique.
+      const cle = etat.type === "image" ? "fabriqueAgentsImage" : etat.type === "video" ? "fabriqueAgentsVideo" : null;
+      const auteur = cle !== null && etat.agent === run.agentId && agentsAutorises(config, cle).includes(run.agentId) && (await deps.agentConnu(run.agentId, run.companyId));
+      if (!auteur) return erreur(refus);
+    }
     const resultat = (await lireJson(join(dossier, "resultat.json"))) as { revue?: unknown } | null;
     const revue = resultat?.revue as Record<string, unknown> | null | undefined;
     if (typeof revue !== "object" || revue === null || Array.isArray(revue)) return erreur("Aucun rendu à voir pour ce travail (clé revue absente de resultat.json).");

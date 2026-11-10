@@ -155,12 +155,128 @@ describe("livrable bloqué : renvoi au Coordinateur", () => {
     expect(s.b.t.journal.filter((j) => j.type === "coordinateur.redispatch_sans_parente")).toHaveLength(1);
   });
 
+  it("réveil non mis en file par l'hôte (queued: false) : la demande est journalisée avec erreurReveil, le commentaire reste publié une fois", async () => {
+    const s = banc({ maxCycles: 1 });
+    (s.b.ctx.issues as unknown as Record<string, unknown>).requestWakeup = async () => ({ queued: false, runId: null });
+    await s.route("tache.verdict", relecteur, verdict(REV1, { verdict: "CHANGES_REQUESTED", constats: [INFO] }));
+    await s.route("tache.porte.evaluer", humain, {});
+    await s.route("tache.porte.evaluer", humain, {});
+    expect(s.commentaires.filter((c) => c.issueId === BRIEF)).toHaveLength(1);
+    expect(s.demandes()).toHaveLength(1);
+    expect(s.demandes()[0]!.donnees).toMatchObject({ cle: REV1, erreurReveil: "réveil non mis en file par l'hôte" });
+  });
+
+  it("réveil différé derrière un run actif (queued: false, executionRunId sur la parente) : pas un échec, aucune erreurReveil ni relance", async () => {
+    const s = banc({ maxCycles: 1 });
+    s.b.issues.set(BRIEF, { ...s.b.issues.get(BRIEF)!, executionRunId: "run-actif" });
+    (s.b.ctx.issues as unknown as Record<string, unknown>).requestWakeup = async () => ({ queued: false, runId: null });
+    await s.route("tache.verdict", relecteur, verdict(REV1, { verdict: "CHANGES_REQUESTED", constats: [INFO] }));
+    await s.route("tache.porte.evaluer", humain, {});
+    expect(s.demandes()).toHaveLength(1);
+    expect(s.demandes()[0]!.donnees!.erreurReveil).toBeNull();
+    expect(await s.b.base.reveilsRedispatchRates(SOC)).toEqual([]);
+  });
+
   it("revue BLOCKED_INFORMATION : le Coordinateur est prévenu sans attendre l'épuisement", async () => {
     const s = banc({ maxCycles: 3 });
     await s.route("tache.verdict", relecteur, verdict(REV1, { verdict: "BLOCKED_INFORMATION", controlesNonExecutes: ["BCE injoignable"] }));
     expect(s.reveils).toHaveLength(1);
     expect(s.demandes()[0]!.donnees).toMatchObject({ motifs: ["information_manquante"] });
     expect(s.commentaires.find((c) => c.issueId === BRIEF)!.texte).toContain("BCE injoignable");
+  });
+});
+
+describe("livrable bloqué : reprise des renvois différés (#78)", () => {
+  const reponse = (s: ReturnType<typeof banc>, status: string) => s.b.interactions.set(BRIEF, [{ id: "carte-1", kind: "ask_user_questions", status }]);
+  const rejouer = (s: ReturnType<typeof banc>) => (s.services as unknown as { rejouerRedispatch(c: string): Promise<unknown> }).rejouerRedispatch(SOC);
+  const relances = (s: ReturnType<typeof banc>) => s.b.t.journal.filter((j) => j.type === "coordinateur.redispatch_relance");
+
+  it("parente qui attendait l'humain puis a reçu sa réponse : la passe de reprise publie le renvoi une seule fois, origine reprise", async () => {
+    const s = banc({ maxCycles: 1, parentAttendHumain: true });
+    await s.route("tache.verdict", relecteur, verdict(REV1, { verdict: "CHANGES_REQUESTED", constats: [INFO] }));
+    await s.route("tache.porte.evaluer", humain, {});
+    expect(s.reveils).toHaveLength(0);
+    reponse(s, "answered");
+    await rejouer(s);
+    await rejouer(s);
+    expect(s.commentaires.filter((c) => c.issueId === BRIEF)).toHaveLength(1);
+    expect(s.reveils).toEqual([{ issueId: BRIEF, cle: `atelier-redispatch-${ISSUE}-${REV1}` }]);
+    expect(s.demandes()).toHaveLength(1);
+    expect(s.demandes()[0]!.donnees).toMatchObject({ cle: REV1, origine: "reprise" });
+  });
+
+  it("parente toujours en attente : la passe de reprise ne publie rien et n'ajoute aucun différé", async () => {
+    const s = banc({ maxCycles: 1, parentAttendHumain: true });
+    await s.route("tache.verdict", relecteur, verdict(REV1, { verdict: "CHANGES_REQUESTED", constats: [INFO] }));
+    await s.route("tache.porte.evaluer", humain, {});
+    await rejouer(s);
+    await rejouer(s);
+    expect(s.reveils).toHaveLength(0);
+    expect(s.commentaires.filter((c) => c.issueId === BRIEF)).toHaveLength(0);
+    expect(s.demandes()).toHaveLength(0);
+    expect(s.b.t.journal.filter((j) => j.type === "coordinateur.redispatch_differe")).toHaveLength(1);
+  });
+
+  const differe = (s: ReturnType<typeof banc>, cle: string) =>
+    s.b.base.journaliser({ companyId: SOC, type: "coordinateur.redispatch_differe", entite: "tache", entiteId: ISSUE, issueId: ISSUE, acteur: "atelier:redispatch", donnees: { cle } });
+  const clos = (s: ReturnType<typeof banc>) => s.b.t.journal.filter((j) => j.type === "coordinateur.redispatch_differe_clos");
+
+  it("différé que la reprise écarte (aucun_motif) : clos une seule fois, plus rendu à la passe suivante", async () => {
+    const s = banc({ maxCycles: 3 });
+    await differe(s, "rev-ancienne");
+    expect(await s.b.base.differesSansDemande(SOC)).toEqual([{ issueId: ISSUE, cle: "rev-ancienne" }]);
+    await rejouer(s);
+    await rejouer(s);
+    expect(clos(s)).toHaveLength(1);
+    expect(clos(s)[0]!.donnees).toEqual({ cle: "rev-ancienne", raison: "aucun_motif" });
+    expect(clos(s)[0]).toMatchObject({ entite: "tache", entiteId: ISSUE, acteur: "atelier:redispatch" });
+    expect(await s.b.base.differesSansDemande(SOC)).toEqual([]);
+    expect(s.demandes()).toHaveLength(0);
+    expect(s.reveils).toHaveLength(0);
+  });
+
+  it("différé dont la parente attend encore l'humain (attente_humaine) : pas clos, encore rendu", async () => {
+    const s = banc({ maxCycles: 1, parentAttendHumain: true });
+    await s.route("tache.verdict", relecteur, verdict(REV1, { verdict: "CHANGES_REQUESTED", constats: [INFO] }));
+    await s.route("tache.porte.evaluer", humain, {});
+    await rejouer(s);
+    expect(clos(s)).toHaveLength(0);
+    expect(await s.b.base.differesSansDemande(SOC)).toEqual([{ issueId: ISSUE, cle: REV1 }]);
+  });
+
+  it("réveil non mis en file : un seul nouvel essai à la passe suivante, journalisé coordinateur.redispatch_relance, puis plus rien", async () => {
+    const s = banc({ maxCycles: 1 });
+    const appels: Array<{ issueId: string; cle: string | null | undefined }> = [];
+    (s.b.ctx.issues as unknown as Record<string, unknown>).requestWakeup = async (issueId: string, _c: string, opts?: { idempotencyKey?: string | null }) => (appels.push({ issueId, cle: opts?.idempotencyKey }), { queued: false, runId: null });
+    await s.route("tache.verdict", relecteur, verdict(REV1, { verdict: "CHANGES_REQUESTED", constats: [INFO] }));
+    await s.route("tache.porte.evaluer", humain, {});
+    await rejouer(s);
+    await rejouer(s);
+    await rejouer(s);
+    expect(appels).toEqual([
+      { issueId: BRIEF, cle: `atelier-redispatch-${ISSUE}-${REV1}` },
+      { issueId: BRIEF, cle: `atelier-redispatch-${ISSUE}-${REV1}-relance` },
+    ]);
+    expect(relances(s)).toHaveLength(1);
+    expect(relances(s)[0]!.donnees).toMatchObject({ cle: REV1, parentId: BRIEF, erreur: "réveil non mis en file par l'hôte" });
+    expect(s.commentaires.filter((c) => c.issueId === BRIEF)).toHaveLength(1);
+  });
+
+  it("nouvel essai qui lève : relance journalisée avec l'erreur, aucun troisième réveil", async () => {
+    const s = banc({ maxCycles: 1 });
+    let n = 0;
+    (s.b.ctx.issues as unknown as Record<string, unknown>).requestWakeup = async () => {
+      n += 1;
+      if (n === 1) return { queued: false, runId: null };
+      throw new Error("hôte indisponible");
+    };
+    await s.route("tache.verdict", relecteur, verdict(REV1, { verdict: "CHANGES_REQUESTED", constats: [INFO] }));
+    await s.route("tache.porte.evaluer", humain, {});
+    await rejouer(s);
+    await rejouer(s);
+    expect(n).toBe(2);
+    expect(relances(s)).toHaveLength(1);
+    expect(relances(s)[0]!.donnees).toMatchObject({ erreur: "hôte indisponible" });
   });
 });
 
@@ -287,6 +403,33 @@ describe("correction demandée par l'humain : transmise au Coordinateur", () => 
       expect(s.commentaires.filter((c) => c.issueId === ISSUE)).toHaveLength(0);
     });
   }
+
+  it("M4 ter : réveil non mis en file (queued: false) : le livrable est remis dans son état d'avant et la transmission revient au producteur", async () => {
+    const s = await aLApprobation();
+    const avant = { ...s.b.issues.get(ISSUE)! };
+    (s.b.ctx.issues as unknown as Record<string, unknown>).requestWakeup = async () => ({ queued: false, runId: null });
+    const r = await s.decider("Reprendre le titre.");
+    expect((r.corps as { transmission: { transmission: string } }).transmission.transmission).toBe("producteur");
+    const apres = s.b.issues.get(ISSUE)!;
+    expect(apres.status).toBe(avant.status);
+    expect(apres.assigneeAgentId).toBe(avant.assigneeAgentId);
+    expect(apres.assigneeUserId ?? null).toBe(avant.assigneeUserId ?? null);
+    expect(s.b.t.journal.filter((j) => j.type === "coordinateur.correction_transmise")).toHaveLength(0);
+    expect(s.commentaires.filter((c) => c.issueId === ISSUE)).toHaveLength(0);
+  });
+
+  it("réveil différé derrière un run actif (queued: false, executionRunId sur la parente) : transmission au Coordinateur, livrable non remis à son état d'avant", async () => {
+    const s = await aLApprobation();
+    s.b.issues.set(BRIEF, { ...s.b.issues.get(BRIEF)!, executionRunId: "run-actif" });
+    (s.b.ctx.issues as unknown as Record<string, unknown>).requestWakeup = async () => ({ queued: false, runId: null });
+    const r = await s.decider("Reprendre le titre.");
+    expect((r.corps as { transmission: unknown }).transmission).toEqual({ transmission: "coordinateur", parentId: BRIEF });
+    expect(s.b.mises).toContainEqual({ issueId: ISSUE, patch: expect.objectContaining({ status: "blocked", assigneeAgentId: PRODUCTEUR }) });
+    expect(s.b.mises.filter((m) => m.issueId === ISSUE)).toHaveLength(1);
+    const transmises = s.b.t.journal.filter((j) => j.type === "coordinateur.correction_transmise");
+    expect(transmises).toHaveLength(1);
+    expect(transmises[0]!.donnees!.erreurReveil).toBeNull();
+  });
 
   it("tâche sans parente assignée au Coordinateur : comportement actuel (rien côté serveur, l'écran rend au producteur)", async () => {
     const s = await aLApprobation({ sansParente: true });

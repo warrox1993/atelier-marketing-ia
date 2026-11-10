@@ -40,6 +40,7 @@ const plugin = definePlugin({
       logger: ctx.logger,
       config: async (companyId) => (await ctx.config.get(companyId)) as Record<string, unknown> | null,
       bilan: { ctx, base: creerBase(ctx.db) },
+      redispatch: services.rejouerRedispatch ? { rejouer: services.rejouerRedispatch } : undefined,
     });
     veilleur.demarrer();
     // Moteur de missions (#49) : reprise, minuterie et filet `issue.updated` (voir moteur/branchement.ts).

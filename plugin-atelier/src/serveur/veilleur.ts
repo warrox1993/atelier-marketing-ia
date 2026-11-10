@@ -27,6 +27,7 @@
 import type { PluginContext } from "@paperclipai/plugin-sdk";
 import type { BaseAtelier } from "./base.js";
 import { rattraperBilansJ30 } from "./bilan-j30.js";
+import { erreurReveilNonEnFile } from "./redispatch.js";
 
 export const VEILLEUR = {
   seuilMinutesDefaut: 15,
@@ -42,13 +43,15 @@ export const VEILLEUR = {
 
 export interface DependancesVeilleur {
   base: Pick<BaseAtelier, "entreprisesSuivies" | "tachesOrphelines" | "datesJournal" | "journaliser" | "listerDecisions">;
-  issues: Pick<PluginContext["issues"], "listInteractions" | "requestWakeup" | "createComment">;
+  issues: Pick<PluginContext["issues"], "get" | "listInteractions" | "requestWakeup" | "createComment">;
   logger: Pick<PluginContext["logger"], "info" | "warn">;
   /** Configuration de l'entreprise (instanceConfigSchema) ; `veilleurSeuilMinutes` facultatif. */
   config: (companyId: string) => Promise<Record<string, unknown> | null | undefined>;
   maintenant?: () => Date;
   /** Rattrapage des bilans J+30 non créés à la confirmation (aucun réveil d'agent : il ne fait que créer la tâche de bilan). */
   bilan?: { ctx: PluginContext; base: BaseAtelier };
+  /** Reprise des renvois au Coordinateur différés ou dont le réveil a échoué (#78). */
+  redispatch?: { rejouer(companyId: string): Promise<unknown> };
 }
 
 export function seuilMinutes(config: Record<string, unknown> | null | undefined): number {
@@ -129,6 +132,7 @@ export function creerVeilleur(d: DependancesVeilleur) {
             contextSource: "atelier.veilleur",
             idempotencyKey: `atelier-veilleur-${t.issueId}-${Math.floor(now / (seuil * 60_000))}`,
           });
+          erreur = await erreurReveilNonEnFile(d.issues, t.issueId, companyId, resultat);
         } catch (err) {
           erreur = err instanceof Error ? err.message : String(err);
         }
@@ -169,6 +173,11 @@ export function creerVeilleur(d: DependancesVeilleur) {
           if (d.bilan) await rattraperBilansJ30(d.bilan, companyId);
         } catch (err) {
           d.logger.warn("Veilleur : rattrapage des bilans J+30 interrompu", { companyId, erreur: err instanceof Error ? err.message : String(err) });
+        }
+        try {
+          await d.redispatch?.rejouer(companyId);
+        } catch (err) {
+          d.logger.warn("Veilleur : reprise des renvois au Coordinateur interrompue", { companyId, erreur: err instanceof Error ? err.message : String(err) });
         }
       }
     } finally {

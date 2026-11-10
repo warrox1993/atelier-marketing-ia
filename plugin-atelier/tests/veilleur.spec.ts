@@ -14,13 +14,14 @@ const AGENT = "99999999-9999-4999-8999-999999999999";
 
 type Candidat = { issueId: string; identifier: string | null; statut: string; agentId: string; dernierRun: { id: string; statut: string; le: string } | null };
 
-function banc(o: { candidats?: Candidat[]; interactions?: Array<{ status: string }>; reveilEchoue?: boolean; commentaireEchoue?: boolean; interactionsLeveesPour?: string; avecBilan?: boolean } = {}) {
+function banc(o: { candidats?: Candidat[]; interactions?: Array<{ status: string }>; reveilEchoue?: boolean; reveilNonEnFile?: boolean; runActif?: boolean; repriseEchoue?: boolean; commentaireEchoue?: boolean; interactionsLeveesPour?: string; avecBilan?: boolean } = {}) {
   const commentaires: Array<{ issueId: string; corps: string; options: unknown }> = [];
   const decisions: Array<{ creeLe: string }> = [];
   let maintenant = new Date(Date.UTC(2026, 9, 16, 12, 0, 0));
   const journal: Array<{ type: string; issueId: string; creeLe: string; donnees: unknown }> = [];
   const reveils: Array<{ issueId: string; cle: string | null | undefined }> = [];
   const rattrapages: string[] = [];
+  const reprises: string[] = [];
   // Tâche interrompue il y a 20 minutes (le SQL l'a déjà retenue comme orpheline au-delà du seuil).
   const candidats: Candidat[] = o.candidats ?? [
     { issueId: ORPHELINE, identifier: "ATL-35", statut: "in_progress", agentId: AGENT, dernierRun: { id: "run-1", statut: "interrupted", le: new Date(maintenant.getTime() - 20 * 60_000).toISOString() } },
@@ -35,6 +36,7 @@ function banc(o: { candidats?: Candidat[]; interactions?: Array<{ status: string
       journaliser: async (e: { type: string; issueId?: string | null; donnees?: unknown }) => void journal.push({ type: e.type, issueId: e.issueId ?? "", creeLe: maintenant.toISOString(), donnees: e.donnees }),
     } as never,
     issues: {
+      get: async (issueId: string) => ({ id: issueId, executionRunId: o.runActif ? "run-actif" : null }),
       listInteractions: async (issueId: string) => {
         if (issueId === o.interactionsLeveesPour) throw new Error("lecture des interactions impossible");
         return (o.interactions ?? []) as never;
@@ -42,6 +44,7 @@ function banc(o: { candidats?: Candidat[]; interactions?: Array<{ status: string
       requestWakeup: async (issueId: string, _c: string, opts?: { idempotencyKey?: string | null }) => {
         if (o.reveilEchoue) throw new Error("Issue is blocked by unresolved blockers");
         reveils.push({ issueId, cle: opts?.idempotencyKey });
+        if (o.reveilNonEnFile) return { queued: false, runId: null };
         return { queued: true, runId: "run-2" };
       },
       createComment: async (issueId: string, corps: string, _c: string, options?: unknown) => {
@@ -50,6 +53,7 @@ function banc(o: { candidats?: Candidat[]; interactions?: Array<{ status: string
         return { id: "c-1" };
       },
     } as never,
+    redispatch: { rejouer: async (c: string) => { reprises.push(c); if (o.repriseEchoue) throw new Error("reprise impossible"); } },
     logger: { info() {}, warn() {} },
     config: async () => ({}),
     maintenant: () => maintenant,
@@ -57,7 +61,7 @@ function banc(o: { candidats?: Candidat[]; interactions?: Array<{ status: string
   });
   const avancer = (minutes: number) => (maintenant = new Date(maintenant.getTime() + minutes * 60_000));
   const maintenantIso = () => maintenant.toISOString();
-  return { veilleur, journal, reveils, seuils, avancer, candidats, decisions, maintenantIso, commentaires, rattrapages };
+  return { veilleur, journal, reveils, seuils, avancer, candidats, decisions, maintenantIso, commentaires, rattrapages, reprises };
 }
 
 describe("veilleur des tâches orphelines", () => {
@@ -212,6 +216,31 @@ describe("veilleur des tâches orphelines", () => {
     expect((await b.veilleur.passe()).ignorees).toEqual([{ issueId: ORPHELINE, raison: "deja_reveillee_dans_la_periode" }]);
   });
 
+  it("un réveil non mis en file (queued: false) est un échec, pas une tâche réveillée, et compte pour la période", async () => {
+    const b = banc({ reveilNonEnFile: true });
+    const r = await b.veilleur.passe();
+    expect(r.reveillees).toEqual([]);
+    expect(r.echecs).toEqual([{ issueId: ORPHELINE, erreur: "réveil non mis en file par l'hôte" }]);
+    expect(b.journal.filter((j) => j.type === "veilleur.reveil")).toHaveLength(1);
+    b.avancer(5);
+    expect((await b.veilleur.passe()).ignorees).toEqual([{ issueId: ORPHELINE, raison: "deja_reveillee_dans_la_periode" }]);
+  });
+
+  it("un réveil différé derrière un run actif (queued: false, executionRunId sur la tâche) n'est pas compté en échec", async () => {
+    const b = banc({ reveilNonEnFile: true, runActif: true });
+    const r = await b.veilleur.passe();
+    expect(r.echecs).toEqual([]);
+    expect(r.reveillees).toEqual([ORPHELINE]);
+  });
+
+  it("la passe appelle la reprise des renvois pour chaque entreprise, et une reprise en échec n'arrête ni la passe ni le rattrapage J+30", async () => {
+    const b = banc({ repriseEchoue: true, avecBilan: true });
+    const r = await b.veilleur.passe();
+    expect(b.reprises).toEqual([SOC]);
+    expect(r.reveillees).toEqual([ORPHELINE]);
+    expect(b.rattrapages).toEqual([SOC]);
+  });
+
   it("seuil configurable, borné entre 5 minutes et 24 heures", () => {
     expect(seuilMinutes({})).toBe(15);
     expect(seuilMinutes({ veilleurSeuilMinutes: 30 })).toBe(30);
@@ -238,6 +267,36 @@ describe("sélection SQL des tâches orphelines : exclusions", () => {
     expect(sql).toContain("a.type = 'veilleur.abandon'");
     expect(sql).toContain("r.type in ('veilleur.reveil', 'cycles.remise_humaine') and r.cree_le > max(a.cree_le)");
     expect(sql).toContain("from plugin_atelier_f0322cc62c.decisions_humaines h where h.company_id = $1 and h.issue_id = a.issue_id and h.cree_le > max(a.cree_le)");
+    expect(sql).toMatch(/limit 20$/u);
+  });
+
+  it("reprise des renvois : différés sans demande de même clé, tâche non close, 30 jours, 20 au plus", async () => {
+    const vues: Array<{ sql: string; params: unknown[] }> = [];
+    const base = creerBase({ namespace: "plugin_atelier_f0322cc62c", query: async (sql: string, params: unknown[]) => (vues.push({ sql, params }), [{ issue_id: ORPHELINE, cle: "rev-1" }]), execute: async () => ({ rowCount: 0 }) } as never);
+    expect(await base.differesSansDemande(SOC)).toEqual([{ issueId: ORPHELINE, cle: "rev-1" }]);
+    const { sql, params } = vues[0]!;
+    expect(params).toEqual([SOC]);
+    expect(sql).toContain("d.type = 'coordinateur.redispatch_differe'");
+    expect(sql).toContain("join public.issues i on i.id = d.issue_id");
+    expect(sql).toContain("i.status not in ('done', 'cancelled')");
+    expect(sql).toContain("d.cree_le > now() - interval '30 days'");
+    expect(sql).toContain("r.type = 'coordinateur.redispatch_demande' and r.donnees->>'cle' = d.donnees->>'cle'");
+    expect(sql).toContain("r.company_id = $1 and r.issue_id = d.issue_id and r.type = 'coordinateur.redispatch_differe_clos' and r.donnees->>'cle' = d.donnees->>'cle'");
+    expect(sql).toMatch(/limit 20$/u);
+  });
+
+  it("reprise des renvois : réveils ratés sans relance de même clé, 30 jours, 20 au plus", async () => {
+    const vues: Array<{ sql: string; params: unknown[] }> = [];
+    const base = creerBase({ namespace: "plugin_atelier_f0322cc62c", query: async (sql: string, params: unknown[]) => (vues.push({ sql, params }), [{ issue_id: ORPHELINE, cle: "rev-1", parent_id: "parent-1" }]), execute: async () => ({ rowCount: 0 }) } as never);
+    expect(await base.reveilsRedispatchRates(SOC)).toEqual([{ issueId: ORPHELINE, cle: "rev-1", parentId: "parent-1" }]);
+    const { sql, params } = vues[0]!;
+    expect(params).toEqual([SOC]);
+    expect(sql).toContain("d.type = 'coordinateur.redispatch_demande'");
+    expect(sql).toContain("d.donnees->>'erreurReveil' is not null");
+    expect(sql).toContain("join public.issues i on i.id = d.issue_id");
+    expect(sql).toContain("i.status not in ('done', 'cancelled')");
+    expect(sql).toContain("d.cree_le > now() - interval '30 days'");
+    expect(sql).toContain("r.type = 'coordinateur.redispatch_relance' and r.donnees->>'cle' = d.donnees->>'cle'");
     expect(sql).toMatch(/limit 20$/u);
   });
 

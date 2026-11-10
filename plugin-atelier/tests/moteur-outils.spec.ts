@@ -35,7 +35,7 @@ const REVISION = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 function baseMemoire() {
   const missions = new Map<string, Mission>();
   const etapes: EtapeMission[] = [];
-  const executions = new Map<string, { statut: string }>();
+  const executions = new Map<string, { statut: string; missionId?: string }>();
   const journal: Array<{ type: string; donnees?: Record<string, unknown> }> = [];
   const sources: Array<Record<string, unknown>> = [];
   const compteurs = { transitions: 0, majEtape: 0 };
@@ -80,10 +80,10 @@ function baseMemoire() {
       const e = etapes.find((x) => x.companyId === companyId && x.issueId === issueId);
       return e ? { ...e } : null;
     },
-    async enregistrerExecution(e: { companyId: string; cle: string }) {
+    async enregistrerExecution(e: { companyId: string; cle: string; missionId?: string }) {
       const k = `${e.companyId}|${e.cle}`;
       if (executions.has(k)) return false;
-      executions.set(k, { statut: "demandee" });
+      executions.set(k, { statut: "demandee", missionId: e.missionId });
       return true;
     },
     async marquerExecution(companyId: string, cle: string, statut: string) {
@@ -92,6 +92,13 @@ function baseMemoire() {
       return Boolean(x);
     },
     async lireExecution(companyId: string, cle: string) { return executions.get(`${companyId}|${cle}`) ?? null; },
+    /** Comme le SQL : exécutions `appliquee` de la mission, clé commençant par `prefixe` et finissant par `suffixe` (vide : sans suffixe de cycle). */
+    async compterExecutionsAppliquees(companyId: string, missionId: string, prefixe: string, suffixe: string) {
+      return [...executions].filter(([k, x]) => {
+        const cle = k.slice(k.indexOf("|") + 1);
+        return k.startsWith(`${companyId}|`) && x.missionId === missionId && x.statut === "appliquee" && cle.startsWith(prefixe) && (suffixe ? cle.endsWith(suffixe) : !/:c[0-9]+$/.test(cle));
+      }).length;
+    },
     async journaliser(e: { type: string; donnees?: Record<string, unknown> }) { journal.push({ type: e.type, donnees: e.donnees }); },
     async listerSources(_companyId: string, filtre: { campagneId?: string; issueId?: string } = {}) {
       return sources.filter((s) => (filtre.issueId ? s.issueId === filtre.issueId : s.campagneId === filtre.campagneId));

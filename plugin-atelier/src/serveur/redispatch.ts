@@ -25,10 +25,31 @@ import type { BaseAtelier } from "./base.js";
 
 type Issue = NonNullable<Awaited<ReturnType<PluginContext["issues"]["get"]>>>;
 
+/** Réveil sans exception mais que l'hôte n'a pas mis en file (`queued: false`) : compté comme un échec (#78). */
+export const REVEIL_NON_EN_FILE = "réveil non mis en file par l'hôte";
+
+/**
+ * Erreur d'un réveil rendu `queued: false`, ou `null` si ce n'est pas un échec. Socle `heartbeat/queue.ts` : quand un run
+ * d'exécution est déjà actif sur la tâche, le réveil est rangé derrière lui (`deferred_issue_execution`) et rendu `null` ;
+ * il partira à la fin du run, la tâche porte alors `executionRunId`.
+ */
+export async function erreurReveilNonEnFile(issues: Pick<PluginContext["issues"], "get">, issueId: string, companyId: string, reveil: { queued: boolean } | null): Promise<string | null> {
+  if (reveil?.queued !== false) return null;
+  try {
+    if ((await issues.get(issueId, companyId))?.executionRunId) return null;
+  } catch {
+    // relecture impossible : le réveil reste compté comme non mis en file
+  }
+  return REVEIL_NON_EN_FILE;
+}
+
 export const REDISPATCH = {
   typeDemande: "coordinateur.redispatch_demande",
   typeDiffere: "coordinateur.redispatch_differe",
+  /** Différé que la reprise a examiné et écarté (aucun motif, déjà fait, hors porte, sans parente) : il n'est plus rejoué. */
+  typeDiffereClos: "coordinateur.redispatch_differe_clos",
   typeSansParente: "coordinateur.redispatch_sans_parente",
+  typeRelance: "coordinateur.redispatch_relance",
   raisonReveil: "atelier_livrable_bloque_redispatch",
   sourceReveil: "atelier.redispatch",
   /** Longueur maximale d'un texte de relecteur recopié dans le commentaire. */
@@ -213,7 +234,7 @@ export interface EtatLivrable {
 }
 
 export interface DependancesRedispatch {
-  base: Pick<BaseAtelier, "journaliser" | "lireJournal" | "datesJournal" | "listerConstats" | "listerVerdicts" | "listerCouvertures" | "listerEvaluations" | "bloqueursNonResolus">;
+  base: Pick<BaseAtelier, "journaliser" | "lireJournal" | "datesJournal" | "listerConstats" | "listerVerdicts" | "listerCouvertures" | "listerEvaluations" | "bloqueursNonResolus" | "differesSansDemande" | "reveilsRedispatchRates">;
   issues: Pick<PluginContext["issues"], "get" | "update" | "createComment" | "requestWakeup" | "listInteractions">;
   logger: Pick<PluginContext["logger"], "info" | "warn">;
   /** État de la porte du livrable (révision, cycles, refus) ; `null` hors porte. */
@@ -260,10 +281,10 @@ export function creerRedispatch(d: DependancesRedispatch) {
     return suite;
   }
 
-  const examiner = (companyId: string, issueId: string, origine: "porte" | "couverture" | "verdict"): Promise<ResultatRedispatch> =>
+  const examiner = (companyId: string, issueId: string, origine: "porte" | "couverture" | "verdict" | "reprise"): Promise<ResultatRedispatch> =>
     enFile(`${companyId}|${issueId}`, () => examinerSansFile(companyId, issueId, origine));
 
-  async function examinerSansFile(companyId: string, issueId: string, origine: "porte" | "couverture" | "verdict"): Promise<ResultatRedispatch> {
+  async function examinerSansFile(companyId: string, issueId: string, origine: "porte" | "couverture" | "verdict" | "reprise"): Promise<ResultatRedispatch> {
     const issue = await d.issues.get(issueId, companyId);
     if (!issue || issue.companyId !== companyId) return { declenche: false, raison: "hors_porte" };
     const e = await d.etat(companyId, issue);
@@ -347,6 +368,7 @@ export function creerRedispatch(d: DependancesRedispatch) {
         contextSource: REDISPATCH.sourceReveil,
         idempotencyKey: `atelier-redispatch-${issueId}-${cle}`,
       });
+      erreurReveil = await erreurReveilNonEnFile(d.issues, parent.id, companyId, reveil);
     } catch (err) {
       erreurReveil = err instanceof Error ? err.message : String(err);
     }
@@ -436,6 +458,10 @@ export function creerRedispatch(d: DependancesRedispatch) {
         contextSource: REDISPATCH.sourceReveil,
         idempotencyKey: `atelier-correction-humaine-${p.decisionId}`,
       });
+      erreurReveil = await erreurReveilNonEnFile(d.issues, parent.id, companyId, reveil);
+      if (erreurReveil !== null) {
+        d.logger.warn("Correction humaine : réveil du Coordinateur refusé", { issueId: issue.id, parentId: parent.id, erreur: erreurReveil });
+      }
     } catch (err) {
       erreurReveil = err instanceof Error ? err.message : String(err);
       d.logger.warn("Correction humaine : réveil du Coordinateur refusé", { issueId: issue.id, parentId: parent.id, erreur: erreurReveil });
@@ -463,5 +489,44 @@ export function creerRedispatch(d: DependancesRedispatch) {
     return { transmission: "coordinateur", parentId: parent.id };
   }
 
-  return { examiner, transmettreCorrection };
+  /** Un seul nouvel essai du réveil d'une demande dont le réveil a échoué ; le résultat est journalisé, réussi ou non. */
+  async function relancerReveil(companyId: string, issueId: string, cle: string, parentId: string) {
+    let reveil: { queued: boolean; runId: string | null } | null = null;
+    let erreur: string | null = null;
+    try {
+      reveil = await d.issues.requestWakeup(parentId, companyId, {
+        reason: REDISPATCH.raisonReveil,
+        contextSource: REDISPATCH.sourceReveil,
+        idempotencyKey: `atelier-redispatch-${issueId}-${cle}-relance`,
+      });
+      erreur = await erreurReveilNonEnFile(d.issues, parentId, companyId, reveil);
+    } catch (err) {
+      erreur = err instanceof Error ? err.message : String(err);
+    }
+    await d.base.journaliser({ companyId, type: REDISPATCH.typeRelance, entite: "tache", entiteId: issueId, issueId, acteur: "atelier:redispatch", donnees: { cle, parentId, reveil, erreur } });
+    if (erreur) d.logger.warn("Redispatch : nouvel essai du réveil du Coordinateur refusé", { issueId, parentId, erreur });
+  }
+
+  /** Passe de reprise (veilleur) : rejoue les renvois différés dont la parente n'attend plus, et retente une fois les réveils ratés. */
+  async function rejouer(companyId: string): Promise<void> {
+    for (const { issueId, cle } of await d.base.differesSansDemande(companyId)) {
+      try {
+        const resultat = await examiner(companyId, issueId, "reprise");
+        if (!resultat.declenche && resultat.raison !== "attente_humaine") {
+          await d.base.journaliser({ companyId, type: REDISPATCH.typeDiffereClos, entite: "tache", entiteId: issueId, issueId, acteur: "atelier:redispatch", donnees: { cle, raison: resultat.raison } });
+        }
+      } catch (err) {
+        d.logger.warn("Redispatch : reprise d'un renvoi différé en échec", { issueId, erreur: err instanceof Error ? err.message : String(err) });
+      }
+    }
+    for (const { issueId, cle, parentId } of await d.base.reveilsRedispatchRates(companyId)) {
+      try {
+        await enFile(`${companyId}|${issueId}`, () => relancerReveil(companyId, issueId, cle, parentId));
+      } catch (err) {
+        d.logger.warn("Redispatch : nouvel essai du réveil en échec", { issueId, erreur: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  }
+
+  return { examiner, transmettreCorrection, rejouer };
 }

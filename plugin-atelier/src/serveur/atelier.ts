@@ -36,6 +36,8 @@ export interface Services {
   actions: Partial<Record<keyof typeof ACTIONS_UI, GestionnaireAction>>;
   /** Évaluation de la porte sans le contrôle de rôle de la route : réservée au moteur de missions (qui contrôle lui-même le relecteur). */
   evaluerPorte?: (companyId: string, issueId: string, par: string) => Promise<{ decision: string; motifs: unknown[] }>;
+  /** Passe de reprise des renvois au Coordinateur (#78), appelée par le veilleur. */
+  rejouerRedispatch?: (companyId: string) => Promise<void>;
   /** Lectures des étapes en code du moteur (WF-01), limitées à l'entreprise demandée. */
   lecturesMoteur?: Pick<ServicesProspection, "lireProspectsMoteur" | "contexteExclusionsMoteur" | "modeMoteur">;
 }

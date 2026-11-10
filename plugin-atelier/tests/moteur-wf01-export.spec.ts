@@ -202,6 +202,22 @@ describe("export CRM : appel unique, attente, reprise", () => {
     expect(t.crm.appels).toEqual([[P1, P2, P3]]);
   });
 
+  it("nouvel appel après un lot réduit : une seconde ligne moteur.export_en_attente (#62)", async () => {
+    let appelId = "appel-1";
+    const crm: CrmMoteur = {
+      async existe() { return false; },
+      async confirme() { return false; },
+      async ecrire() { return { etat: "en_attente", appelId, consigne: null }; },
+    };
+    const t = await jusquAutorisation({ crm });
+    t.approuver();
+    await t.executeur.surDoneNatif(SOC, t.issue);
+    await t.executeur.reprendre(SOC);
+    appelId = "appel-2";
+    await t.executeur.reprendre(SOC);
+    expect(t.journal.filter((j) => j.type === "moteur.export_en_attente").map((j) => j.donnees?.appelId)).toEqual(["appel-1", "appel-2"]);
+  });
+
   it("lot vide (tous les prospects écartés) : la mission part en blocage, rien n'est exporté", async () => {
     const t = await jusquAutorisation({ zone: { codesPostaux: ["9999"] } });
     t.approuver();
@@ -429,6 +445,61 @@ describe("sans CRM : lot rendu en fichier (#60)", () => {
     expect(t.etat()).toBe("cloturee");
     expect(t.commentaires).toHaveLength(1);
     expect(t.journal.filter((j) => j.type === "moteur.fichier_pret")).toHaveLength(1);
+  });
+
+  for (const type of ["fichier_pret", "export_marque_opposition"]) {
+    it(`arrêt entre la clé et le journal de ${type} : la trace existe après reprise, mission close (#62)`, async () => {
+      const t = avecRacine(await jusquAutorisation({ entrees: ENTREES_FICHIER, crm: crmInterdit, oppositions: [{ type: "courriel", valeur: h(2) }] }));
+      const journaliser = t.base.journaliser;
+      let panne = true;
+      t.base.journaliser = async (e: { type: string; donnees?: Record<string, unknown> }) => {
+        if (panne && e.type === `moteur.${type}`) {
+          panne = false;
+          throw new Error("arrêt simulé entre la clé et le journal");
+        }
+        return journaliser(e);
+      };
+      t.approuver();
+      await expect(t.executeur.surDoneNatif(SOC, t.issue)).rejects.toThrow("arrêt simulé");
+      expect(t.journal.filter((j) => j.type === `moteur.${type}`)).toHaveLength(0);
+      await t.executeur.reprendre(SOC);
+      expect(t.etat()).toBe("cloturee");
+      expect(t.journal.filter((j) => j.type === `moteur.${type}`)).toHaveLength(1);
+    });
+  }
+
+  it("createComment en échec durable : étape 9 terminée, mission close, fichier listé, une ligne fichier_commentaire_echec (#62)", async () => {
+    const t = avecRacine(await jusquAutorisation({ entrees: ENTREES_FICHIER, crm: crmInterdit }));
+    t.hote.issues.createComment = async () => { throw new Error("commentaire refusé"); };
+    await clore(t);
+    for (let i = 0; i < 3; i++) await t.executeur.reprendre(SOC);
+    expect(t.etat()).toBe("cloturee");
+    expect(t.etapes.find((e) => e.rang === 9)).toMatchObject({ etat: "terminee", sortie: { fichier: { canal: "courriel", prospectIds: [P1, P2, P3] } } });
+    expect(t.journal.filter((j) => j.type === "moteur.fichier_commentaire_echec")).toHaveLength(1);
+    expect(t.journal.find((j) => j.type === "moteur.fichier_commentaire_echec")!.donnees).toMatchObject({ erreur: "commentaire refusé" });
+  });
+
+  it("createComment en échec durable sur l'appel à approuver : mission en attente, une ligne reprise_echec (#62)", async () => {
+    const t = await jusquAutorisation();
+    t.crm.enAttente(true);
+    t.hote.issues.createComment = async () => { throw new Error("commentaire refusé"); };
+    t.approuver();
+    await expect(t.executeur.surDoneNatif(SOC, t.issue)).rejects.toThrow("commentaire refusé");
+    for (let i = 0; i < 3; i++) await t.executeur.reprendre(SOC);
+    expect(t.etat()).toBe("en_execution");
+    expect(t.journal.filter((j) => j.type === "moteur.reprise_echec")).toHaveLength(1);
+  });
+
+  it("lot de 5 001 prospects sans CRM : blocage lot_fichier_trop_grand, aucun fichier listé (#62)", async () => {
+    const t = avecRacine(await jusquAutorisation({ entrees: ENTREES_FICHIER, crm: crmInterdit }));
+    t.etapesCode.lot = async () => Array.from({ length: 5001 }, (_, i) => ({ prospectId: `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`, marqueOpposition: false }));
+    await clore(t);
+    expect(t.etat()).toBe("blocage");
+    expect(t.journal.find((j) => j.type === "moteur.blocage")?.donnees).toMatchObject({ raison: "lot_fichier_trop_grand" });
+    const etape9 = t.etapes.find((e) => e.rang === 9)!;
+    expect(etape9.etat).not.toBe("terminee");
+    expect(etape9.sortie ?? {}).not.toHaveProperty("fichier");
+    expect(t.journal.some((j) => j.type === "moteur.fichier_pret")).toBe(false);
   });
 
   it("sans CRM : aucune coordonnée au journal ni au commentaire", async () => {

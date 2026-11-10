@@ -31,7 +31,8 @@ done < <(find "${INSTALLEE}" -type f -print0 | sort -z)
 
 # Sens 2 : fichiers du dépôt que l'installeur copie (sources, générateurs, JSON, gabarits) et qui manquent.
 # shortcut: sélection recopiée de installer-fabrique.sh:108-133 (les polices, figées par empreinte, ne sont
-# comparées que dans le sens 1) ; tester-installer-fabrique.sh vérifie que l'installeur garde ces motifs.
+# comparées que dans le sens 1) ; tester-installer-fabrique.sh vérifie que l'installeur garde ces motifs ;
+# à fusionner dans une liste partagée si un troisième script a besoin de cette sélection.
 while IFS= read -r -d '' fichier; do
   relatif="${fichier#"${SOURCE}"/}"
   [[ -f "${INSTALLEE}/${relatif}" ]] || ECARTS+=("non installé : ${relatif}")

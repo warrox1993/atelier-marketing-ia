@@ -6,8 +6,9 @@
  * ne produit plus rien ; une clé `demandee` est reprise. Le SDK ne transmet pas `idempotencyKey` à la création d'une
  * tâche : l'unicité vient de la lecture par origine avant chaque création.
  */
+import { createHash } from "node:crypto";
 import type { PluginContext } from "@paperclipai/plugin-sdk";
-import { CanalContact, IdNatif, PLUGIN_ID } from "../contrats/index.js";
+import { CanalContact, IdNatif, PLUGIN_ID, exportFichierMax } from "../contrats/index.js";
 import type { BaseAtelier, EtapeMission, Mission } from "../serveur/base.js";
 import { chargerContrat, verifierEntrees, verifierSortie } from "./contrats.js";
 import { chargerGabarit as chargerGabaritReel, poserPorteMission, PorteRefusee, rangPorte, type DepsPorteMission, type Gabarit } from "./gabarits.js";
@@ -19,6 +20,8 @@ const CONTEXTE = "atelier.moteur";
 const ROLE_COORDINATEUR = "coordinateur";
 /** Essais d'export CRM partiels avant de signaler l'effet comme ambigu. */
 export const ESSAIS_EXPORT_MAX = 3;
+/** Refus identiques d'une même étape avant d'appliquer la conduite en cas d'échec du contrat. Valeur sans mesure, à relire avec les journaux de runs après #57. */
+export const REFUS_IDENTIQUES_MAX = 5;
 
 export interface HoteMoteur {
   issues: Pick<PluginContext["issues"], "create" | "list" | "get" | "update" | "requestWakeup" | "listInteractions" | "createComment" | "listComments">;
@@ -29,7 +32,7 @@ export interface HoteMoteur {
 type BaseMoteur = Pick<
   BaseAtelier,
   | "lireMission" | "missionsActives" | "changerEtatMission" | "changerRangMission" | "creerEtape" | "lireEtapes" | "majEtape"
-  | "etapeParIssue" | "enregistrerExecution" | "marquerExecution" | "lireExecution" | "executionsDemandees" | "journaliser"
+  | "etapeParIssue" | "enregistrerExecution" | "marquerExecution" | "lireExecution" | "compterExecutionsAppliquees" | "executionsDemandees" | "journaliser"
 >;
 
 /** Agent tel que le liste `ctx.agents.list` : seuls l'identifiant, l'état et les métadonnées servent. */
@@ -93,6 +96,9 @@ const suffixeCycle = (m: Pick<Mission, "cycleBlocage">) => (m.cycleBlocage > 0 ?
 export const cleCycle = (m: Pick<Mission, "id" | "cycleBlocage">, rang: number, tentative: number, evenement: string, source?: string) =>
   `${cleEvenement(m.id, rang, tentative, evenement, source)}${suffixeCycle(m)}`;
 
+/** Échec de `createComment` seul (pas celui de la marque d'exécution) : l'appelant peut le tolérer. */
+class ErreurCommentaire extends Error {}
+
 export function creerExecuteur(deps: DepsExecuteur) {
   const { hote, base, horloge } = deps;
   const charger = deps.chargerGabarit ?? chargerGabaritReel;
@@ -103,7 +109,8 @@ export function creerExecuteur(deps: DepsExecuteur) {
   /** Journalise une fois par clé (`type` et discriminant) : une cause qui se répète à chaque passe ne remplit pas le journal. */
   async function journalUneFois(m: Mission, rang: number, type: string, donnees: Record<string, unknown>, issueId?: string | null, discriminant?: string) {
     const cle = cleCycle(m, rang, 1, type, discriminant);
-    if (!(await base.enregistrerExecution({ companyId: m.companyId, missionId: m.id, rang, type: "evenement", cle, requete: { type } }))) return;
+    const neuve = await base.enregistrerExecution({ companyId: m.companyId, missionId: m.id, rang, type: "evenement", cle, requete: { type } });
+    if (!neuve && (await base.lireExecution(m.companyId, cle))?.statut === "appliquee") return;
     await journal(m, `moteur.${type}`, donnees, issueId);
     await base.marquerExecution(m.companyId, cle, "appliquee");
   }
@@ -138,7 +145,13 @@ export function creerExecuteur(deps: DepsExecuteur) {
     const neuve = await base.enregistrerExecution({ companyId: m.companyId, missionId: m.id, rang, type: "evenement", cle, requete: { type } });
     if (!neuve && (await base.lireExecution(m.companyId, cle))?.statut === "appliquee") return;
     const corps = `${texte}\n\nMission : ${m.id}`;
-    if (!(await hote.issues.listComments(cible, m.companyId)).some((c) => c.body === corps)) await hote.issues.createComment(cible, corps, m.companyId);
+    if (!(await hote.issues.listComments(cible, m.companyId)).some((c) => c.body === corps)) {
+      try {
+        await hote.issues.createComment(cible, corps, m.companyId);
+      } catch (e) {
+        throw new ErreurCommentaire(e instanceof Error ? e.message : String(e));
+      }
+    }
     await base.marquerExecution(m.companyId, cle, "appliquee");
   }
 
@@ -400,6 +413,23 @@ export function creerExecuteur(deps: DepsExecuteur) {
     return true;
   }
 
+  /**
+   * Inscrit ce refus (signature des erreurs, qui ne citent que des noms de champs) à la première clé libre de 0 à `REFUS_IDENTIQUES_MAX - 1`.
+   * Vrai quand le plafond est atteint. Le compte repart de zéro après un cycle de blocage (`cleCycle`) ou une demande de changements
+   * (« manche » : nombre de `changements_demandes` appliqués pour cette étape dans le cycle courant).
+   */
+  async function compterRefus(m: Mission, rang: number, tentative: number, erreurs: string[]): Promise<boolean> {
+    const signature = createHash("sha256").update(JSON.stringify([...erreurs].sort())).digest("hex").slice(0, 16);
+    const manche = await base.compterExecutionsAppliquees(m.companyId, m.id, `${cleEvenement(m.id, rang, tentative, "changements_demandes")}:`, suffixeCycle(m));
+    for (let n = 0; n < REFUS_IDENTIQUES_MAX; n++) {
+      const cle = cleCycle(m, rang, tentative, "refus", `${signature}${manche ? `:m${manche}` : ""}:${n}`);
+      if (!(await base.enregistrerExecution({ companyId: m.companyId, missionId: m.id, rang, type: "evenement", cle, requete: { type: "refus", signature } }))) continue;
+      await base.marquerExecution(m.companyId, cle, "appliquee");
+      return n === REFUS_IDENTIQUES_MAX - 1;
+    }
+    return true;
+  }
+
   async function traiterResultat(companyId: string, r: { missionId: string; rang: number; tentative: number; sortie: unknown; cleEvenement?: string; revisionLivrable?: string }): Promise<ResultatEtape> {
     const m = await base.lireMission(companyId, r.missionId);
     if (!m) throw new Error(`Mission « ${r.missionId} » inconnue.`);
@@ -412,11 +442,20 @@ export function creerExecuteur(deps: DepsExecuteur) {
     const etape = p.etapes.find((e) => e.rang === r.rang && e.tentative === r.tentative);
     const g = p.gabarit.etapes.find((e) => e.rang === r.rang);
     if (!etape || !g) throw new Error(`Étape ${r.rang} (tentative ${r.tentative}) inconnue pour la mission « ${m.id} ».`);
-    const verdict = verifierSortie(chargerContrat(g.contratId, g.contratVersion), r.sortie);
+    const contrat = chargerContrat(g.contratId, g.contratVersion);
+    const verdict = verifierSortie(contrat, r.sortie);
     if (!verdict.ok) {
-      await appliquer(companyId, m.id, r.rang, r.tentative, "sortie_hors_contrat", r.cleEvenement);
+      // Un dépôt redélivré (même clé d'événement) est un rejeu : il ne prend pas une place de plus du compteur.
+      const t = await appliquer(companyId, m.id, r.rang, r.tentative, "sortie_hors_contrat", r.cleEvenement);
+      if (!t.applique && r.cleEvenement !== undefined) return { statut: "refuse", erreurs: verdict.erreurs };
       await journal(m, "moteur.sortie_hors_contrat", { rang: r.rang, erreurs: verdict.erreurs }, etape.issueId);
-      return { statut: "refuse", erreurs: verdict.erreurs };
+      const plafond = await compterRefus(m, r.rang, r.tentative, verdict.erreurs);
+      if (!plafond) return { statut: "refuse", erreurs: verdict.erreurs };
+      const echec = contrat.conduiteEchec === "echec";
+      // shortcut: un arrêt entre l'inscription du dernier refus et cette conduite laisse la mission en `en_cours` ; le dépôt suivant (autre clé d'événement) retrouve les clés prises et l'applique. Sans nouveau dépôt, la reprise ne la rattrape pas : à reprendre si cet arrêt est observé.
+      if (echec) await arreterEnEchec(m, r.rang);
+      else await bloquer(m, p.etapes, "plafond_atteint");
+      return { statut: "refuse", erreurs: [...verdict.erreurs, `Plafond de refus identiques atteint : ${echec ? "la mission s'arrête" : "l'étape passe à l'arbitrage"}.`] };
     }
     await base.majEtape(companyId, etape.id, { sortie: r.sortie, etat: "terminee", ...(r.revisionLivrable ? { revisionLivrable: r.revisionLivrable } : {}) });
     const derniere = r.rang === rangPorte(p.gabarit);
@@ -608,6 +647,13 @@ export function creerExecuteur(deps: DepsExecuteur) {
     return suite;
   }
 
+  /** Ferme une tâche encore ouverte ; rien si elle est absente ou déjà `done` ou `cancelled`. */
+  async function fermerTache(m: Mission, id: unknown, status: "done" | "cancelled") {
+    if (typeof id !== "string") return;
+    const tache = await hote.issues.get(id, m.companyId);
+    if (tache && tache.status !== "done" && tache.status !== "cancelled") await hote.issues.update(id, { status }, m.companyId);
+  }
+
   /** Effet ambigu : la mission part en blocage et le coordinateur est signalé sur la dernière tâche existante. */
   async function effetAmbigu(m: Mission, rang: number, donnees: Record<string, unknown>) {
     const raison = typeof donnees.raison === "string" ? donnees.raison : undefined;
@@ -671,14 +717,8 @@ export function creerExecuteur(deps: DepsExecuteur) {
     return true;
   }
 
-  /**
-   * Abandon décidé par le coordinateur sous accord humain (contrôlé par l'outil) : une transition vers `echec`, puis les tâches encore ouvertes sont annulées.
-   * Les tâches terminées (dont la porte) ne sont pas touchées. Faux si la mission n'est plus en blocage ou si la transition est perdue.
-   */
-  async function abandonner(m: Mission): Promise<boolean> {
-    const rang = Math.max(1, m.rangCourant);
-    if (!(await appliquer(m.companyId, m.id, rang, 1, "arbitrage_abandon")).applique) return false;
-    await journal(m, "moteur.abandon", { rang });
+  /** Annule les tâches encore ouvertes de la mission (étapes, exécution, arbitrage du rang) ; les tâches terminées, dont la porte, ne sont pas touchées. */
+  async function annulerTachesOuvertes(m: Mission, rang: number) {
     const etapes = await base.lireEtapes(m.companyId, m.id);
     const ids = new Set<string>(etapes.flatMap((e) => [e.issueId, objet(e.sortie).tacheExecution].filter((x): x is string => typeof x === "string")));
     const arbitrage = await trouverTache(m.companyId, `mission:${m.id}:${rang}:arbitrage${suffixeCycle(m)}`);
@@ -688,6 +728,24 @@ export function creerExecuteur(deps: DepsExecuteur) {
       const tache = await hote.issues.get(id, m.companyId);
       if (tache && tache.status !== "done" && tache.status !== "cancelled") await hote.issues.update(id, { status: "cancelled" }, m.companyId);
     }
+  }
+
+  /** Conduite `echec` du contrat : la mission s'arrête (`echec_declare`), sans réveil, et ses tâches ouvertes sont annulées. */
+  async function arreterEnEchec(m: Mission, rang: number) {
+    if (!(await appliquer(m.companyId, m.id, rang, 1, "echec_declare")).applique) return;
+    await journal(m, "moteur.plafond_atteint", { rang, conduite: "echec" });
+    await annulerTachesOuvertes(m, rang);
+  }
+
+  /**
+   * Abandon décidé par le coordinateur sous accord humain (contrôlé par l'outil) : une transition vers `echec`, puis les tâches encore ouvertes sont annulées.
+   * Les tâches terminées (dont la porte) ne sont pas touchées. Faux si la mission n'est plus en blocage ou si la transition est perdue.
+   */
+  async function abandonner(m: Mission): Promise<boolean> {
+    const rang = Math.max(1, m.rangCourant);
+    if (!(await appliquer(m.companyId, m.id, rang, 1, "arbitrage_abandon")).applique) return false;
+    await journal(m, "moteur.abandon", { rang });
+    await annulerTachesOuvertes(m, rang);
     return true;
   }
 
@@ -721,14 +779,26 @@ export function creerExecuteur(deps: DepsExecuteur) {
           const canal = objet(entreeRang1.exportFichier).canal;
           if (!CanalContact.safeParse(canal).success) return effetAmbigu(m, g.rang, { raison: "canal_fichier_absent" });
           const prospectIds = [...new Set(lot.map((l) => l.prospectId))];
+          // La route du fichier refuse au-delà : mieux vaut bloquer ici que clore sur un fichier impossible à télécharger.
+          if (prospectIds.length > exportFichierMax) return effetAmbigu(m, g.rang, { raison: "lot_fichier_trop_grand", prospects: prospectIds.length });
           await journalUneFois(m, g.rang, "fichier_pret", { canal, prospects: prospectIds.length });
-          await commenterUneFois(m, g.rang, "fichier_commentaire", "Le fichier du lot est prêt dans la vue Prospects, section « Fichiers de mission ».");
+          // Le commentaire informe seulement : son échec ne retient pas le fichier, le journal le dit.
+          try {
+            await commenterUneFois(m, g.rang, "fichier_commentaire", "Le fichier du lot est prêt dans la vue Prospects, section « Fichiers de mission ».");
+          } catch (e) {
+            if (!(e instanceof ErreurCommentaire)) throw e;
+            await journalUneFois(m, g.rang, "fichier_commentaire_echec", { erreur: e.message });
+          }
           await termine({ reussis: [], echecs: [], essais: 0, fichier: { canal, prospectIds } });
           continue;
         }
         const precedents = typeof objet(etape.sortie).essais === "number" ? (objet(etape.sortie).essais as number) : 0;
         const { reussis, echecs, attente, execution, blocage } = await exporterLot(ec.deps, m, g.rang, lot);
-        if (blocage) return effetAmbigu(m, g.rang, { raison: blocage.raison, motif: blocage.motif });
+        if (blocage) {
+          // La diffusion ne repartira plus telle quelle : la tâche d'exécution de l'agent est annulée (un arrêt avant la transition se rejoue sans dommage).
+          await fermerTache(m, objet(etape.sortie).tacheExecution, "cancelled");
+          return effetAmbigu(m, g.rang, { raison: blocage.raison, motif: blocage.motif });
+        }
         if (execution) {
           // Diffusion préparée : le moteur n'a pas le jeton du CRM, l'agent `crm-conversion` rejoue la diffusion avec la même clé. Une seule tâche par diffusion (la garde `trouverTache` couvre une nouvelle passe).
           const agent = await hote.resoudreAgent(m.companyId, "crm-conversion");
@@ -739,7 +809,7 @@ export function creerExecuteur(deps: DepsExecuteur) {
           // Tâche fermée alors que la diffusion reste préparée : l'agent a clos sans déposer d'issue, rien à réveiller.
           if (existante && (existante.status === "done" || existante.status === "cancelled")) {
             // Après une reprise de l'arbitrage, la même tâche (même clé, même diffusion) est rouverte une seule fois par cycle ; refermée dans le même cycle, nouveau blocage.
-            // shortcut: un arrêt entre l'enregistrement de la clé et la réouverture bloque à la passe suivante, le coordinateur arbitre de nouveau (3 cycles au plus).
+            // shortcut: un arrêt entre l'enregistrement de la clé et la réouverture bloque à la passe suivante, le coordinateur arbitre de nouveau (3 cycles au plus), à revoir si le journal montre un arbitrage relancé sans changement d'état de la diffusion.
             const rouverte = m.cycleBlocage > 0 && (await base.enregistrerExecution({ companyId: m.companyId, missionId: m.id, rang: g.rang, type: "evenement", cle: cleCycle(m, g.rang, 1, "reouverture_execution", execution.diffusionId), requete: { type: "reouverture_execution" } }));
             if (!rouverte) return effetAmbigu(m, g.rang, { raison: "execution_crm_sans_issue", tacheId: existante.id });
             await hote.issues.update(existante.id, { status: "todo" }, m.companyId);
@@ -764,7 +834,7 @@ export function creerExecuteur(deps: DepsExecuteur) {
         if (attente) {
           // Attente de l'approbation humaine : ni échec ni essai, la mission reste en exécution et une passe suivante rejoue la même clé.
           await base.majEtape(m.companyId, etape.id, { sortie: { reussis, echecs: [], essais: precedents, enAttente: true }, etat: "en_cours" });
-          await journalUneFois(m, g.rang, "export_en_attente", { appelId: attente.appelId, consigne: attente.consigne });
+          await journalUneFois(m, g.rang, "export_en_attente", { appelId: attente.appelId, consigne: attente.consigne }, null, attente.appelId ?? undefined);
           // Présenter l'appel à l'humain sur la tâche de la porte : service, nombre de prospects, identifiant de l'appel ; aucune coordonnée ni dénomination.
           const service = objet(entreeRang1.exportCrm).service;
           await commenterUneFois(
@@ -775,11 +845,18 @@ export function creerExecuteur(deps: DepsExecuteur) {
           return;
         }
         const essais = precedents + 1;
-        if (echecs.length === 0) await termine({ reussis, echecs: [], essais });
-        else {
-          await base.majEtape(m.companyId, etape.id, { sortie: { reussis, echecs, essais }, etat: "en_cours" });
+        if (echecs.length === 0) {
+          await fermerTache(m, objet(etape.sortie).tacheExecution, "done");
+          await termine({ reussis, echecs: [], essais });
+        } else {
+          // La tâche d'exécution reste dans la sortie : l'abandon et la fermeture la retrouvent.
+          const tacheExecution = objet(etape.sortie).tacheExecution;
+          await base.majEtape(m.companyId, etape.id, { sortie: { reussis, echecs, essais, ...(typeof tacheExecution === "string" ? { tacheExecution } : {}) }, etat: "en_cours" });
           await journal(m, "moteur.export_partiel", { rang: g.rang, reussis, echecs, essais });
-          if (essais >= ESSAIS_EXPORT_MAX) await effetAmbigu(m, g.rang, { raison: "export_partiel", essais });
+          if (essais >= ESSAIS_EXPORT_MAX) {
+            await fermerTache(m, tacheExecution, "cancelled");
+            await effetAmbigu(m, g.rang, { raison: "export_partiel", essais });
+          }
           return;
         }
       } else if (g.action === "verifier" && ec) {

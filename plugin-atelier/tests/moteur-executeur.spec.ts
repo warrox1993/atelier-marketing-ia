@@ -5,7 +5,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import manifest from "../src/manifest.js";
-import { agentParSlug, creerExecuteur, creerResolveur, moteurActif, ORIGINE_ETAPE, reprendreSiActif, type DepsExecuteur } from "../src/moteur/executeur.js";
+import { agentParSlug, creerExecuteur, creerResolveur, moteurActif, ORIGINE_ETAPE, REFUS_IDENTIQUES_MAX, reprendreSiActif, type DepsExecuteur } from "../src/moteur/executeur.js";
 import { chargerGabarit, PorteRefusee, type Gabarit } from "../src/moteur/gabarits.js";
 import type { EtapeMission, Mission } from "../src/serveur/base.js";
 
@@ -89,6 +89,13 @@ function baseMemoire() {
     },
     async lireExecution(companyId: string, cle: string) {
       return executions.get(`${companyId}|${cle}`) ?? null;
+    },
+    /** Comme le SQL : exécutions `appliquee` de la mission, clé commençant par `prefixe` et finissant par `suffixe` (vide : sans suffixe de cycle). */
+    async compterExecutionsAppliquees(companyId: string, missionId: string, prefixe: string, suffixe: string) {
+      return [...executions].filter(([k, x]) => {
+        const cle = k.slice(k.indexOf("|") + 1);
+        return k.startsWith(`${companyId}|`) && x.missionId === missionId && x.statut === "appliquee" && cle.startsWith(prefixe) && (suffixe ? cle.endsWith(suffixe) : !/:c[0-9]+$/.test(cle));
+      }).length;
     },
     async journaliser(e: { type: string; donnees?: Record<string, unknown> }) {
       journal.push({ type: e.type, donnees: e.donnees });
@@ -267,6 +274,100 @@ describe("exécuteur de missions", () => {
     expect(r.erreurs.length).toBeGreaterThan(0);
     expect(t.reveils).toHaveLength(1);
     expect(t.missions.get(t.missionId)).toMatchObject({ etat: "en_cours", rangCourant: 1 });
+  });
+
+  describe("plafond de refus identiques (#84)", () => {
+    const HORS = { textes: "pas une liste" };
+    const AUTRE = { briefsVisuels: "pas une liste" };
+    const deposer = (t: Awaited<ReturnType<typeof monter>>, sortie: unknown, n: number, cle?: (i: number) => string | undefined) =>
+      (async () => {
+        let dernier;
+        for (let i = 0; i < n; i++) dernier = await t.executeur.recevoirResultat(SOC, { ...resultat(t.missionId, 1, sortie), ...(cle?.(i) ? { cleEvenement: cle(i) } : {}) });
+        return dernier!;
+      })();
+
+    it("REFUS_IDENTIQUES_MAX refus hors contrat identiques donnent blocage et un seul réveil du coordinateur", async () => {
+      const t = await monter();
+      await t.executeur.demarrerMission(SOC, t.missionId);
+      const [i1] = [...t.issues.keys()];
+      await deposer(t, HORS, REFUS_IDENTIQUES_MAX - 1, (i) => `run-${i}`);
+      expect(t.missions.get(t.missionId)).toMatchObject({ etat: "en_cours", rangCourant: 1 });
+      expect(t.reveils).toHaveLength(1);
+      const r = await t.executeur.recevoirResultat(SOC, { ...resultat(t.missionId, 1, HORS), cleEvenement: "run-plafond" });
+      expect(r.statut).toBe("refuse");
+      expect(t.missions.get(t.missionId)!.etat).toBe("blocage");
+      expect(t.journal.find((j) => j.type === "moteur.blocage")?.donnees).toMatchObject({ evenement: "plafond_atteint", rang: 1 });
+      expect(t.majs).toContainEqual({ id: i1, patch: { status: "blocked", assigneeAgentId: "agent-coordinateur" } });
+      expect(t.reveils).toHaveLength(2);
+      expect(t.reveils[1]!.options.reason).toBe("moteur_blocage");
+    });
+
+    it("un dépôt après le plafond est ignoré, sans réveil", async () => {
+      const t = await monter();
+      await t.executeur.demarrerMission(SOC, t.missionId);
+      await deposer(t, HORS, REFUS_IDENTIQUES_MAX, (i) => `run-${i}`);
+      const reveils = t.reveils.length;
+      const r = await t.executeur.recevoirResultat(SOC, { ...resultat(t.missionId, 1, HORS), cleEvenement: "run-apres" });
+      expect(r.statut).toBe("ignore");
+      expect(t.reveils).toHaveLength(reveils);
+    });
+
+    it("un même dépôt redélivré (même clé d'événement) ne compte qu'une fois", async () => {
+      const t = await monter();
+      await t.executeur.demarrerMission(SOC, t.missionId);
+      await deposer(t, HORS, REFUS_IDENTIQUES_MAX, () => "run-unique");
+      expect(t.missions.get(t.missionId)!.etat).toBe("en_cours");
+    });
+
+    it("le même dépôt livré deux fois au 4e refus ne fait pas atteindre le plafond", async () => {
+      const t = await monter();
+      await t.executeur.demarrerMission(SOC, t.missionId);
+      await deposer(t, HORS, REFUS_IDENTIQUES_MAX - 2, (i) => `run-${i}`);
+      await deposer(t, HORS, 2, () => "run-doublon");
+      expect(t.missions.get(t.missionId)).toMatchObject({ etat: "en_cours", rangCourant: 1 });
+      expect(t.reveils).toHaveLength(1);
+      expect(t.journal.some((j) => j.type === "moteur.blocage")).toBe(false);
+    });
+
+    it("après des changements demandés par le relecteur, le compte des refus identiques repart de zéro", async () => {
+      const t = await monter({ gabarit: GABARIT_PORTE_1, campagneId: "campagne-1" });
+      await t.executeur.demarrerMission(SOC, t.missionId);
+      await deposer(t, HORS, REFUS_IDENTIQUES_MAX - 1, (i) => `run-${i}`);
+      await t.executeur.recevoirResultat(SOC, { ...resultat(t.missionId, 1), cleEvenement: "run-ok" });
+      expect(t.missions.get(t.missionId)!.etat).toBe("en_revue");
+      await t.executeur.deposerVerdict(SOC, { missionId: t.missionId, rang: 1, tentative: 1, accepte: false, runId: "run-r1" });
+      expect(t.missions.get(t.missionId)!.etat).toBe("en_cours");
+      await deposer(t, HORS, 1, () => "run-m1-0");
+      expect(t.missions.get(t.missionId)!.etat).toBe("en_cours");
+      await deposer(t, HORS, REFUS_IDENTIQUES_MAX - 1, (i) => `run-m1-${i + 1}`);
+      expect(t.missions.get(t.missionId)!.etat).toBe("blocage");
+    });
+
+    it("des refus aux erreurs différentes ne s'additionnent pas", async () => {
+      const t = await monter();
+      await t.executeur.demarrerMission(SOC, t.missionId);
+      await deposer(t, HORS, REFUS_IDENTIQUES_MAX - 1);
+      await deposer(t, AUTRE, REFUS_IDENTIQUES_MAX - 1);
+      expect(t.missions.get(t.missionId)!.etat).toBe("en_cours");
+    });
+
+    it("après la reprise de l'arbitrage, le compteur repart de zéro", async () => {
+      const t = await monter();
+      await t.executeur.demarrerMission(SOC, t.missionId);
+      await deposer(t, HORS, REFUS_IDENTIQUES_MAX);
+      expect(await t.executeur.sortirDeBlocage(SOC, t.missionId)).toBe(true);
+      await deposer(t, HORS, REFUS_IDENTIQUES_MAX - 1);
+      expect(t.missions.get(t.missionId)!.etat).toBe("en_cours");
+    });
+
+    it("la reprise après le plafond ne réveille personne de plus", async () => {
+      const t = await monter();
+      await t.executeur.demarrerMission(SOC, t.missionId);
+      await deposer(t, HORS, REFUS_IDENTIQUES_MAX);
+      const reveils = t.reveils.length;
+      await t.executeur.reprendre(SOC);
+      expect(t.reveils).toHaveLength(reveils);
+    });
   });
 
   it("une entrée manquante mène à attente_information, sans aucun réveil", async () => {
